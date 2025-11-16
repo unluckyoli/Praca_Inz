@@ -114,7 +114,7 @@ export const getActivityById = async (req, res) => {
     
     const activity = await prisma.activity.findFirst({
       where: {
-        id: parseInt(id),
+        id,
         userId
       }
     });

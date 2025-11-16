@@ -26,7 +26,10 @@ export const getActivityDistribution = async (req, res) => {
 export const getWeeklyStats = async (req, res) => {
   try {
     const userId = req.session.userId;
-    const { weeks = 12 } = req.query;
+    const weeks = parseInt(req.query.weeks) || 12;
+    
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - (weeks * 7));
     
     const weeklyStats = await prisma.$queryRaw`
       SELECT 
@@ -38,7 +41,7 @@ export const getWeeklyStats = async (req, res) => {
         SUM("elevationGain") as total_elevation
       FROM "Activity"
       WHERE "userId" = ${userId}
-        AND "startDate" >= NOW() - INTERVAL '${weeks} weeks'
+        AND "startDate" >= ${cutoffDate}
       GROUP BY DATE_TRUNC('week', "startDate")
       ORDER BY week DESC
     `;
@@ -53,7 +56,10 @@ export const getWeeklyStats = async (req, res) => {
 export const getMonthlyTrends = async (req, res) => {
   try {
     const userId = req.session.userId;
-    const { months = 6 } = req.query;
+    const months = parseInt(req.query.months) || 6;
+    
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
     
     const monthlyTrends = await prisma.$queryRaw`
       SELECT 
@@ -66,7 +72,7 @@ export const getMonthlyTrends = async (req, res) => {
         AVG("averageHeartRate") as avg_heart_rate
       FROM "Activity"
       WHERE "userId" = ${userId}
-        AND "startDate" >= NOW() - INTERVAL '${months} months'
+        AND "startDate" >= ${cutoffDate}
       GROUP BY DATE_TRUNC('month', "startDate")
       ORDER BY month ASC
     `;
@@ -146,9 +152,10 @@ export const getProgressOverTime = async (req, res) => {
       return res.status(400).json({ error: 'Invalid metric or period' });
     }
     
+    // Use Prisma.sql to safely construct the query
     const progress = await prisma.$queryRaw`
       SELECT 
-        DATE_TRUNC(${period}, "startDate") as period,
+        DATE_TRUNC(${prisma.Prisma.raw(`'${period}'`)}, "startDate") as period,
         AVG(${prisma.Prisma.raw(`"${metric}"`)}) as avg_value,
         MAX(${prisma.Prisma.raw(`"${metric}"`)}) as max_value,
         MIN(${prisma.Prisma.raw(`"${metric}"`)}) as min_value,
@@ -156,7 +163,7 @@ export const getProgressOverTime = async (req, res) => {
       FROM "Activity"
       WHERE "userId" = ${userId}
         AND ${prisma.Prisma.raw(`"${metric}"`)} IS NOT NULL
-      GROUP BY DATE_TRUNC(${period}, "startDate")
+      GROUP BY DATE_TRUNC(${prisma.Prisma.raw(`'${period}'`)}, "startDate")
       ORDER BY period ASC
       LIMIT 50
     `;

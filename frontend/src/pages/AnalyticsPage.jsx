@@ -23,8 +23,8 @@ function AnalyticsPage() {
     try {
       const [dist, weekly, monthly, intensity] = await Promise.all([
         analyticsAPI.getDistribution(),
-        analyticsAPI.getWeeklyStats(12),
-        analyticsAPI.getMonthlyTrends(6),
+        analyticsAPI.getWeeklyStats({ weeks: 12 }),
+        analyticsAPI.getMonthlyTrends({ months: 6 }),
         analyticsAPI.getIntensityDistribution()
       ]);
 

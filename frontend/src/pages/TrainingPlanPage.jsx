@@ -268,7 +268,7 @@ function TrainingPlanPage() {
                       >
                         <div className="session-day">{getDayName(session.dayOfWeek)}</div>
                         <div className="session-content">
-                          <div className="session-title">{session.type.replace('_', ' ')}</div>
+                          <div className="session-title">{session.sessionType?.replace('_', ' ') || 'Trening'}</div>
                           <div className="session-meta">
                             <span><Clock size={14} /> {session.duration} min</span>
                             {session.distance && <span><Target size={14} /> {(session.distance / 1000).toFixed(1)} km</span>}

@@ -50,7 +50,7 @@ function SessionModal({ session, intervals, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content session-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{getTypeLabel(session.type)}</h2>
+          <h2>{getTypeLabel(session.sessionType)}</h2>
           <button className="modal-close" onClick={onClose}>
             <X size={24} />
           </button>
@@ -129,26 +129,26 @@ function SessionModal({ session, intervals, onClose }) {
           <div className="session-notes">
             <h3>Wskazówki</h3>
             <ul>
-              {session.type === 'EASY_RUN' && (
+              {session.sessionType === 'EASY_RUN' && (
                 <>
                   <li>Utrzymuj komfortowe tempo, przy którym możesz swobodnie rozmawiać</li>
                   <li>Skup się na technice biegu i relaksacji</li>
                 </>
               )}
-              {session.type === 'LONG_RUN' && (
+              {session.sessionType === 'LONG_RUN' && (
                 <>
                   <li>Rozpocznij w wolnym tempie i stopniowo zwiększaj intensywność</li>
                   <li>Pamiętaj o regularnym nawadnianiu</li>
                 </>
               )}
-              {session.type === 'INTERVAL' && (
+              {session.sessionType === 'INTERVAL' && (
                 <>
                   <li>Rozgrzewka 10-15 minut w łatwym tempie</li>
                   <li>Przerwy między interwałami: aktywny odpoczynek (trucht)</li>
                   <li>Zakończ 10-minutową rozciągką</li>
                 </>
               )}
-              {session.type === 'RECOVERY' && (
+              {session.sessionType === 'RECOVERY' && (
                 <>
                   <li>To trening regeneracyjny - priorytetem jest odpoczynek</li>
                   <li>Możesz wykonać lekki stretching lub spacer</li>

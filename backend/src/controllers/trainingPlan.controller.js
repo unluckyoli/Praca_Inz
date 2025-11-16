@@ -54,50 +54,67 @@ export const getRecommendedPlan = async (req, res) => {
       focusType = 'MIXED';
     }
     
-    const recommendedPlans = await prisma.$queryRaw`
-      SELECT 
-        t.*,
-        (
-          CASE 
-            WHEN t.level = ${level}::text::"Level" THEN 100
-            WHEN t.level = 'INTERMEDIATE' AND ${level} = 'ADVANCED' THEN 80
-            WHEN t.level = 'BEGINNER' AND ${level} = 'INTERMEDIATE' THEN 80
-            WHEN t.level = 'ADVANCED' AND ${level} = 'ELITE' THEN 80
-            ELSE 50
-          END +
-          CASE 
-            WHEN t."focusType" = ${focusType}::text::"FocusType" THEN 100
-            WHEN t."focusType" = 'MIXED' THEN 70
-            ELSE 30
-          END +
-          CASE 
-            WHEN ABS(t."weeklyHours" - ${Math.round(avgWeeklyHours)}) <= 1 THEN 100
-            WHEN ABS(t."weeklyHours" - ${Math.round(avgWeeklyHours)}) <= 2 THEN 70
-            ELSE 40
-          END
-        ) as match_score
-      FROM "TrainingPlanTemplate" t
-      ORDER BY match_score DESC
-      LIMIT 3
-    `;
+    // Get all templates and score them in JavaScript for safety
+    const allTemplates = await prisma.trainingPlanTemplate.findMany({
+      include: {
+        weeks: {
+          include: {
+            sessions: true
+          },
+          orderBy: { weekNumber: 'asc' }
+        }
+      }
+    });
+    
+    // Score templates based on user profile
+    const scoredTemplates = allTemplates.map(template => {
+      let score = 0;
+      
+      // Level match (100 points for exact, 80 for adjacent, 50 for others)
+      if (template.level === level) {
+        score += 100;
+      } else if (
+        (template.level === 'INTERMEDIATE' && level === 'ADVANCED') ||
+        (template.level === 'BEGINNER' && level === 'INTERMEDIATE') ||
+        (template.level === 'ADVANCED' && level === 'ELITE')
+      ) {
+        score += 80;
+      } else {
+        score += 50;
+      }
+      
+      // Focus type match
+      if (template.focusType === focusType) {
+        score += 100;
+      } else if (template.focusType === 'MIXED') {
+        score += 70;
+      } else {
+        score += 30;
+      }
+      
+      // Weekly hours match
+      const hoursDiff = Math.abs(template.weeklyHours - Math.round(avgWeeklyHours));
+      if (hoursDiff <= 1) {
+        score += 100;
+      } else if (hoursDiff <= 2) {
+        score += 70;
+      } else {
+        score += 40;
+      }
+      
+      return { ...template, matchScore: score };
+    });
+    
+    // Sort by score and get top 3
+    const recommendedPlans = scoredTemplates
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 3);
     
     const topPlan = recommendedPlans[0];
     
     if (topPlan) {
-      const fullPlan = await prisma.trainingPlanTemplate.findUnique({
-        where: { id: topPlan.id },
-        include: {
-          weeks: {
-            include: {
-              sessions: true
-            },
-            orderBy: { weekNumber: 'asc' }
-          }
-        }
-      });
-      
       res.json({
-        recommendedPlan: fullPlan,
+        recommendedPlan: topPlan,
         userProfile: {
           level,
           focusType,
@@ -178,7 +195,7 @@ export const getSessionById = async (req, res) => {
     const { id } = req.params;
     
     const session = await prisma.trainingSession.findUnique({
-      where: { id: parseInt(id) }
+      where: { id }
     });
     
     if (!session) {
@@ -187,7 +204,7 @@ export const getSessionById = async (req, res) => {
     
     // Parse intervals if they exist in description
     let intervals = null;
-    if (session.type === 'INTERVAL' && session.description) {
+    if (session.sessionType === 'INTERVAL' && session.description) {
       // Try to extract interval information from description
       const intervalMatch = session.description.match(/(\d+)x(\d+)/i);
       if (intervalMatch) {
