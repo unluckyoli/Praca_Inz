@@ -23,7 +23,7 @@ function DashboardPage() {
     if (!loading) {
       fetchActivities();
     }
-  }, [activityType, dateRange]);
+  }, [activityType, dateRange?.start, dateRange?.end, loading]);
 
   const fetchUserData = async () => {
     try {

@@ -91,9 +91,10 @@ export const analyticsAPI = {
 
 export const dataAPI = {
   getUserStats: () => api.get("/data/stats"),
-  getLongestActivity: (metric) =>
-    api.get("/data/longest-activity", { params: { metric } }),
-  getHardestActivity: () => api.get("/data/hardest-activity"),
+  getLongestActivity: (metric, params) =>
+    api.get("/data/longest-activity", { params: { metric, ...params } }),
+  getHardestActivity: (params) =>
+    api.get("/data/hardest-activity", { params }),
   getRecords: () => api.get("/data/records"),
   getAverages: (groupBy) => api.get("/data/averages", { params: { groupBy } }),
 };

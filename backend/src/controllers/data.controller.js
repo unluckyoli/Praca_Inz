@@ -34,24 +34,44 @@ export const getUserStats = async (req, res) => {
 export const getLongestActivity = async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { metric = "distance" } = req.query;
+    const { metric = "distance", type, startDate, endDate } = req.query;
 
     const validMetrics = ["distance", "duration", "elevationGain"];
     if (!validMetrics.includes(metric)) {
       return res.status(400).json({ error: "Invalid metric" });
     }
 
-    const longestActivity = await prisma.$queryRaw`
- SELECT *
- FROM "Activity"
- WHERE "userId" = ${userId}
- AND ${Prisma.raw(`"${metric}"`)} IS NOT NULL
- ORDER BY ${Prisma.raw(`"${metric}"`)} DESC
- LIMIT 1
- `;
+    // Build WHERE conditions for Prisma
+    const where = {
+      userId,
+      [metric]: {
+        not: null,
+      },
+    };
+
+    if (type && type !== "all") {
+      where.type = type;
+    }
+
+    if (startDate || endDate) {
+      where.startDate = {};
+      if (startDate) {
+        where.startDate.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.startDate.lte = new Date(endDate);
+      }
+    }
+
+    const longestActivity = await prisma.activity.findFirst({
+      where,
+      orderBy: {
+        [metric]: "desc",
+      },
+    });
 
     res.json({
-      activity: longestActivity[0] || null,
+      activity: longestActivity || null,
       metric,
     });
   } catch (error) {
@@ -63,17 +83,45 @@ export const getLongestActivity = async (req, res) => {
 export const getHardestActivity = async (req, res) => {
   try {
     const userId = getUserId(req);
+    const { type, startDate, endDate } = req.query;
 
-    const hardestActivity = await prisma.$queryRaw`
- SELECT *,
- (COALESCE("trainingLoad", 0) * 0.4 + 
- COALESCE("averageHeartRate", 0) * 0.3 + 
- COALESCE("elevationGain", 0) / 10 * 0.3) as difficulty_score
- FROM "Activity"
- WHERE "userId" = ${userId}
- ORDER BY difficulty_score DESC
- LIMIT 1
- `;
+    // Build WHERE conditions with parameterized values
+    let query = `
+      SELECT *,
+        (COALESCE("trainingLoad", 0) * 0.4 + 
+         COALESCE("averageHeartRate", 0) * 0.3 + 
+         COALESCE("elevationGain", 0) / 10 * 0.3) as difficulty_score
+      FROM "Activity"
+      WHERE "userId" = $1
+    `;
+
+    const params = [userId];
+    let paramIndex = 2;
+
+    if (type && type !== "all") {
+      query += ` AND "type" = $${paramIndex}`;
+      params.push(type);
+      paramIndex++;
+    }
+
+    if (startDate) {
+      query += ` AND "startDate" >= $${paramIndex}`;
+      params.push(new Date(startDate));
+      paramIndex++;
+    }
+
+    if (endDate) {
+      query += ` AND "startDate" <= $${paramIndex}`;
+      params.push(new Date(endDate));
+      paramIndex++;
+    }
+
+    query += `
+      ORDER BY difficulty_score DESC
+      LIMIT 1
+    `;
+
+    const hardestActivity = await prisma.$queryRawUnsafe(query, ...params);
 
     res.json({
       activity: hardestActivity[0] || null,

@@ -26,9 +26,33 @@ function DataPage() {
 
   useEffect(() => {
     if (!loading) {
+      fetchActivitiesWithFilters();
       fetchFilteredData();
     }
-  }, [activityType, dateRange, metric]);
+  }, [activityType, dateRange?.start, dateRange?.end, metric, loading]);
+
+  const fetchActivitiesWithFilters = async () => {
+    try {
+      const params = { limit: 50 };
+      
+      if (activityType !== "all") {
+        params.type = activityType;
+      }
+      
+      if (dateRange.start) {
+        params.startDate = dateRange.start.toISOString();
+      }
+      
+      if (dateRange.end) {
+        params.endDate = dateRange.end.toISOString();
+      }
+
+      const filteredActivities = await activitiesAPI.getActivities(params);
+      setActivities(filteredActivities.data.activities || []);
+    } catch (error) {
+      console.error("Fetch activities error:", error);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -66,9 +90,24 @@ function DataPage() {
 
   const fetchFilteredData = async () => {
     try {
+      // Przygotuj parametry filtrów
+      const params = {};
+      
+      if (activityType !== "all") {
+        params.type = activityType;
+      }
+      
+      if (dateRange.start) {
+        params.startDate = dateRange.start.toISOString();
+      }
+      
+      if (dateRange.end) {
+        params.endDate = dateRange.end.toISOString();
+      }
+
       const [longestRes, hardestRes] = await Promise.all([
-        dataAPI.getLongestActivity(metric),
-        dataAPI.getHardestActivity(),
+        dataAPI.getLongestActivity(metric, params),
+        dataAPI.getHardestActivity(params),
       ]);
 
       setLongestActivity(longestRes.data.activity);
