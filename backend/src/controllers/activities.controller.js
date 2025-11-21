@@ -124,12 +124,23 @@ export const syncActivities = async (req, res) => {
             await calculatePowerCurve(created.id, accessToken, activity.id);
           }
 
-          if (
-            (activity.type === "Run" || activity.type === "VirtualRun") &&
-            activity.distance > 0
-          ) {
+
+
+          const rawType = activity.type?.toLowerCase() || "";
+
+          console.log("TYPE RAW:", rawType, "DIST:", activity.distance); //debugging
+
+          const isRunning =
+            rawType.includes("run") ||       
+            rawType.includes("jog") ||       
+            rawType.includes("workout");     
+
+          if (isRunning && activity.distance > 300) {  
             await calculatePaceDistances(created.id, accessToken, activity.id);
           }
+
+
+
 
           newActivities.push(created);
           console.log(`Saved activity: ${activity.name}`);
@@ -205,18 +216,14 @@ export const getActivityTypes = async (req, res) => {
 
 export const recalculatePaceData = async (req, res) => {
   try {
-    const userId = req.user?.id || req.session?.userId;
-    let accessToken = req.session?.accessToken;
-
-    if (!accessToken && process.env.NODE_ENV !== "production") {
-      accessToken = process.env.STRAVA_ACCESS_TOKEN;
-      console.log("Dev mode: Using STRAVA_ACCESS_TOKEN from .env");
-    }
+    const userId = getUserId(req);
+    const accessToken = await getStravaToken(req);
 
     if (!accessToken) {
-      return res
-        .status(401)
-        .json({ error: "Not authenticated with external service" });
+      return res.status(401).json({
+        error: "Not authenticated with Strava. Please link your Strava account first.",
+        requiresStravaLink: true,
+      });
     }
 
     console.log(`Starting pace data recalculation for user ${userId}...`);
@@ -284,6 +291,7 @@ export const recalculatePaceData = async (req, res) => {
     });
   }
 };
+
 
 async function updateUserStats(userId) {
   try {
@@ -397,6 +405,7 @@ async function calculatePaceDistances(
       stravaActivityId,
       ["distance", "time"],
     );
+    console.log("STREAMS:", Object.keys(streams)); //debbuger
 
     if (streams?.distance?.data && streams?.time?.data) {
       const distances = streams.distance.data;

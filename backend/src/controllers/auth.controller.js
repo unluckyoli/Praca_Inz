@@ -301,7 +301,7 @@ export const stravaAuth = (req, res) => {
       client_id: process.env.STRAVA_CLIENT_ID,
       response_type: "code",
       redirect_uri: process.env.STRAVA_CALLBACK_URL,
-      scope: "activity:read_all,profile:read_all",
+      scope: "activity:read_all,profile:read_all", 
       state: stateData,
     });
 
@@ -323,13 +323,13 @@ export const stravaCallback = async (req, res) => {
     const stateData = JSON.parse(state);
     const mode = stateData.mode || "login";
 
-    // KONWERSJA
+
     const stravaId = athlete.id.toString();
     const emailSafe = athlete.email || `strava_${stravaId}@strava.local`;
 
-    // ---------------------------
-    // TRYB 1: PODPIĘCIE DO KONTA
-    // ---------------------------
+
+    // 1)pinned to account
+
     if (mode === "connect") {
       const userId = stateData.userId;
 
@@ -352,20 +352,20 @@ export const stravaCallback = async (req, res) => {
       return res.redirect(`${process.env.CLIENT_URL}/account?strava=linked`);
     }
 
-    // ---------------------------
-    // TRYB 2: LOGOWANIE STRAVĄ
-    // ---------------------------
+
+    // 2)logging through strava
 
     let user = await prisma.user.findUnique({
       where: { stravaId },
     });
 
     if (!user) {
-      // ✔ Tworzymy nowe konto
       user = await prisma.user.create({
         data: {
           email: emailSafe,
           stravaId,
+          firstName: athlete.firstname || null,
+          lastName: athlete.lastname || null,
           password: "STRAVA_OAUTH",
           isEmailVerified: true,
           stravaAccessToken: access_token,
@@ -375,18 +375,23 @@ export const stravaCallback = async (req, res) => {
         },
       });
     } else {
-      // ✔ aktualizujemy tokeny
       await prisma.user.update({
         where: { id: user.id },
         data: {
           stravaAccessToken: access_token,
           stravaRefreshToken: refresh_token,
           stravaTokenExpiresAt: new Date(expires_at * 1000),
+          firstName: athlete.firstname || user.firstName,
+          lastName: athlete.lastname || user.lastName,
         },
       });
+      user = await prisma.user.findUnique({ where: { id: user.id } });
     }
 
-    // generujemy JWT, żeby frontend mógł się zalogować
+
+
+
+    // tokens
     req.session = null;
 
     const jwtAccess = jwtService.generateAccessToken(user.id);

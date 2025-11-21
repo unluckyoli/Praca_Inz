@@ -30,53 +30,52 @@ function DataPage() {
     }
   }, [activityType, dateRange, metric]);
 
-  const fetchData = async () => {
-    try {
-      const [statsRes, activitiesRes] = await Promise.all([
-        dataAPI.getUserStats(),
-        activitiesAPI.getActivities({ limit: 50 }),
-      ]);
+const fetchData = async () => {
+  try {
+    
+    const statsRes = await dataAPI.getUserStats();
+    setStats(statsRes.data.stats);
 
-      setStats(statsRes.data.stats);
-
-      const params = { limit: 50 };
-      if (activityType !== "all") {
-        params.type = activityType;
-      }
-      if (dateRange.start) {
-        params.startDate = dateRange.start.toISOString();
-      }
-      if (dateRange.end) {
-        params.endDate = dateRange.end.toISOString();
-      }
-
-      const filteredActivities = await activitiesAPI.getActivities(params);
-      setActivities(filteredActivities.data.activities || []);
-
-      await fetchFilteredData();
-    } catch (error) {
-      if (error.response?.status === 401) {
-        navigate("/");
-      }
-      console.error("Fetch data error:", error);
-    } finally {
-      setLoading(false);
+    
+    await fetchFilteredData();
+  } catch (error) {
+    if (error.response?.status === 401) {
+      navigate("/");
     }
-  };
+    console.error("Fetch data error:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const fetchFilteredData = async () => {
-    try {
-      const [longestRes, hardestRes] = await Promise.all([
-        dataAPI.getLongestActivity(metric),
-        dataAPI.getHardestActivity(),
-      ]);
+const fetchFilteredData = async () => {
+  try {
+    const params = { limit: 50 };
 
-      setLongestActivity(longestRes.data.activity);
-      setHardestActivity(hardestRes.data.activity);
-    } catch (error) {
-      console.error("Fetch filtered data error:", error);
+    if (activityType !== "all") {
+      params.type = activityType;
     }
-  };
+    if (dateRange.start) {
+      params.startDate = dateRange.start.toISOString();
+    }
+    if (dateRange.end) {
+      params.endDate = dateRange.end.toISOString();
+    }
+
+    const [longestRes, hardestRes, activitiesRes] = await Promise.all([
+      dataAPI.getLongestActivity(metric),
+      dataAPI.getHardestActivity(),
+      activitiesAPI.getActivities(params),
+    ]);
+
+    setLongestActivity(longestRes.data.activity);
+    setHardestActivity(hardestRes.data.activity);
+    setActivities(activitiesRes.data.activities || []);
+  } catch (error) {
+    console.error("Fetch filtered data error:", error);
+  }
+};
+
 
   const handleActivityClick = async (activityId) => {
     try {
