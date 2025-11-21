@@ -76,13 +76,17 @@ export const syncActivities = async (req, res) => {
 
       for (const activity of stravaActivities) {
         const existing = await prisma.activity.findUnique({
-          where: {
-            externalId_source: {
-              externalId: activity.id.toString(),
-              source: "STRAVA",
-            },
+        where: {
+          externalId_source: {
+            externalId: activity.id.toString(),
+            source: "STRAVA",
           },
-        });
+        },
+        include: {
+          paceDistance: true,
+        },
+      });
+
 
         if (!existing) {
           console.log(`Fetching details for activity ${activity.id}...`);
@@ -124,17 +128,37 @@ export const syncActivities = async (req, res) => {
             await calculatePowerCurve(created.id, accessToken, activity.id);
           }
 
-          if (
-            (activity.type === "Run" || activity.type === "VirtualRun") &&
-            activity.distance > 0
-          ) {
-            await calculatePaceDistances(created.id, accessToken, activity.id);
+
+
+          const rawType = activity.type?.toLowerCase() || "";
+
+          console.log("TYPE RAW:", rawType, "DIST:", activity.distance); //debugging
+
+          const isRunning =
+            rawType.includes("run") ||       
+            rawType.includes("jog") ||       
+            rawType.includes("workout");     
+
+          if (isRunning && activity.distance > 300) {  
+            await calculatePaceDistances(created.id, userId, accessToken, activity.id);
           }
+
 
           newActivities.push(created);
           console.log(`Saved activity: ${activity.name}`);
         } else {
           updatedActivities++;
+
+
+          if (!existing.paceDistance && !existing.pacePerKm) {
+           try {
+             await calculatePaceDistances(existing.id, userId, accessToken, activity.id);
+             console.log(`Recalculated pace data for existing activity ${existing.name}`);
+           } catch (err) {
+             console.error("Error recalculating pace for existing activity:", err.message);
+           }
+         }
+
         }
       }
 
@@ -205,18 +229,14 @@ export const getActivityTypes = async (req, res) => {
 
 export const recalculatePaceData = async (req, res) => {
   try {
-    const userId = req.user?.id || req.session?.userId;
-    let accessToken = req.session?.accessToken;
-
-    if (!accessToken && process.env.NODE_ENV !== "production") {
-      accessToken = process.env.STRAVA_ACCESS_TOKEN;
-      console.log("Dev mode: Using STRAVA_ACCESS_TOKEN from .env");
-    }
+    const userId = getUserId(req);
+    const accessToken = await getStravaToken(req);
 
     if (!accessToken) {
-      return res
-        .status(401)
-        .json({ error: "Not authenticated with external service" });
+      return res.status(401).json({
+        error: "Not authenticated with Strava. Please link your Strava account first.",
+        requiresStravaLink: true,
+      });
     }
 
     console.log(`Starting pace data recalculation for user ${userId}...`);
@@ -248,11 +268,13 @@ export const recalculatePaceData = async (req, res) => {
       processed++;
 
       try {
-        await calculatePaceDistances(
-          activity.id,
-          accessToken,
-          activity.externalId,
-        );
+      await calculatePaceDistances(
+        activity.id,
+        userId,
+        accessToken,
+        activity.externalId,
+      );
+
         withPaceData++;
 
         if (processed % 10 === 0) {
@@ -284,6 +306,7 @@ export const recalculatePaceData = async (req, res) => {
     });
   }
 };
+
 
 async function updateUserStats(userId) {
   try {
@@ -388,6 +411,7 @@ async function calculatePowerCurve(activityId, accessToken, stravaActivityId) {
 
 async function calculatePaceDistances(
   activityId,
+  userId,
   accessToken,
   stravaActivityId,
 ) {
@@ -397,10 +421,12 @@ async function calculatePaceDistances(
       stravaActivityId,
       ["distance", "time"],
     );
+    console.log("STREAMS KEYS:", streams ? Object.keys(streams) : "NO STREAMS");
 
     if (streams?.distance?.data && streams?.time?.data) {
-      const distances = streams.distance.data;
-      const times = streams.time.data;
+      const distances = streams.distance.data; // metry, narastająco
+      const times = streams.time.data;         // sekundy, narastająco
+
 
       const targetDistances = {
         1000: "km1",
@@ -428,7 +454,7 @@ async function calculatePaceDistances(
                 Math.abs(dist - targetMeters) / targetMeters < 0.02 &&
                 time > 0
               ) {
-                const pace = time / 60 / (dist / 1000);
+                const pace = time / 60 / (dist / 1000); // min/km
 
                 if (pace < bestPace && pace > 0 && pace < 20) {
                   bestPace = pace;
@@ -443,16 +469,62 @@ async function calculatePaceDistances(
         }
       }
 
+
+      // tempo na kilometr tablica
+      const maxDist = distances[distances.length - 1];
+      const kmCount = Math.floor(maxDist / 1000);
+      const perKm = [];
+
+      let lastIndex = 0;
+      let lastDist = distances[0] || 0;
+      let lastTime = times[0] || 0;
+
+      for (let km = 1; km <= kmCount; km++) {
+        const targetMeters = km * 1000;
+
+        let j = lastIndex;
+        while (j < distances.length && distances[j] < targetMeters) {
+          j++;
+        }
+        if (j >= distances.length) break;
+
+        const distSegment = distances[j] - lastDist;
+        const timeSegment = times[j] - lastTime;
+
+        if (distSegment > 0 && timeSegment > 0) {
+          const pace = (timeSegment / 60) / (distSegment / 1000); // min/km
+          if (pace > 0 && pace < 20) {
+            perKm.push(Math.round(pace * 100) / 100);
+          }
+        }
+
+        lastIndex = j;
+        lastDist = distances[j];
+        lastTime = times[j];
+      }
+
+      //zapis
       if (Object.keys(paceData).length > 0) {
         await prisma.paceDistance.create({
           data: {
             activityId,
+            userId,
             ...paceData,
           },
         });
         console.log(`Calculated pace distances:`, paceData);
       }
+
+      // zapis do activity
+      if (perKm.length > 0) {
+        await prisma.activity.update({
+          where: { id: activityId },
+          data: { pacePerKm: perKm },
+        });
+        console.log(`Saved pacePerKm array (${perKm.length} km)`);
+      }
     } else {
+
       console.log(
         `No streams available, using activity average pace as fallback`,
       );
@@ -463,7 +535,8 @@ async function calculatePaceDistances(
       });
 
       if (activity && activity.distance > 0 && activity.duration > 0) {
-        const avgPace = activity.duration / 60 / (activity.distance / 1000);
+        const avgPace =
+          activity.duration / 60 / (activity.distance / 1000); // min/km
         const paceData = {};
 
         const targetDistances = {
@@ -480,10 +553,14 @@ async function calculatePaceDistances(
           }
         }
 
+
+        
+        // PaceDistance
         if (Object.keys(paceData).length > 0) {
           await prisma.paceDistance.create({
             data: {
               activityId,
+              userId,
               ...paceData,
             },
           });
@@ -492,12 +569,30 @@ async function calculatePaceDistances(
             paceData,
           );
         }
+
+        // pacePerKm jako tablica średnich
+        const kmCount = Math.floor(activity.distance / 1000);
+        if (kmCount > 0) {
+          const perKm = Array(kmCount).fill(
+            Math.round(avgPace * 100) / 100,
+          );
+          await prisma.activity.update({
+            where: { id: activityId },
+            data: { pacePerKm: perKm },
+          });
+          console.log(
+            `Saved fallback pacePerKm array (${kmCount} km, avg ${avgPace.toFixed(
+              2,
+            )} min/km)`,
+          );
+        }
       }
     }
   } catch (error) {
     console.error("Error calculating pace distances:", error.message);
   }
 }
+
 
 async function calculateFitnessMetrics(userId) {
   try {

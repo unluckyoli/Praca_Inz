@@ -316,3 +316,73 @@ export const getProgressOverTime = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch progress data" });
   }
 };
+
+export const compareActivities = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { firstId, secondId } = req.query;
+
+    if (!firstId || !secondId) {
+      return res
+        .status(400)
+        .json({ error: "Both firstId and secondId are required" });
+    }
+
+    const activities = await prisma.activity.findMany({
+      where: {
+        userId,
+        id: { in: [firstId, secondId] },
+      },
+      include: {
+        paceDistance: true,
+      },
+    });
+
+    if (activities.length !== 2) {
+      return res
+        .status(404)
+        .json({ error: "One or both activities not found" });
+    }
+
+    const mapById = Object.fromEntries(
+      activities.map((a) => [a.id, a]),
+    );
+
+    const first = mapById[firstId];
+    const second = mapById[secondId];
+
+    const formatActivity = (a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      startDate: a.startDate,
+      duration: a.duration,
+      distance: a.distance,
+      averageHeartRate: a.averageHeartRate,
+      maxHeartRate: a.maxHeartRate,
+      averageSpeed: a.averageSpeed,
+      maxSpeed: a.maxSpeed,
+      elevationGain: a.elevationGain,
+      calories: a.calories,
+      paceDistance: a.paceDistance
+        ? {
+            km1: a.paceDistance.km1,
+            km5: a.paceDistance.km5,
+            km10: a.paceDistance.km10,
+            km21: a.paceDistance.km21,
+            km42: a.paceDistance.km42,
+          }
+        : null,
+      pacePerKm: Array.isArray(a.pacePerKm) ? a.pacePerKm : null,
+    });
+
+
+    res.json({
+      first: formatActivity(first),
+      second: formatActivity(second),
+    });
+  } catch (error) {
+    console.error("Compare activities error:", error);
+    res.status(500).json({ error: "Failed to compare activities" });
+  }
+};

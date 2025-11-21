@@ -8,6 +8,7 @@ import AccountPage from "./pages/AccountPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import DataPage from "./pages/DataPage";
 import TrainingPlanPage from "./pages/TrainingPlanPage";
+import ComparePage from "./pages/ComparePage";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/data" element={<DataPage />} />
           <Route path="/training-plan" element={<TrainingPlanPage />} />
+          <Route path="/compare" element={<ComparePage />} />
         </Routes>
       </FilterProvider>
     </Router>

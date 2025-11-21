@@ -14,6 +14,19 @@ function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
   const { activityType, dateRange } = useFilters();
+  const params = new URLSearchParams(window.location.search);
+
+if (params.get("auth") === "success") {
+  const access = params.get("access");
+  const refresh = params.get("refresh");
+
+  if (access && refresh) {
+      localStorage.setItem("accessToken", access);
+      localStorage.setItem("refreshToken", refresh);
+      window.location.replace("/dashboard");
+  }
+}
+
 
   useEffect(() => {
     fetchUserData();
@@ -104,6 +117,9 @@ function DashboardPage() {
   const handleLogout = async () => {
     try {
       await authAPI.logout();
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
       navigate("/");
     } catch (error) {
       console.error("Logout error:", error);

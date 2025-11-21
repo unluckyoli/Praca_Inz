@@ -87,6 +87,8 @@ export const analyticsAPI = {
   getIntensityDistribution: () => api.get("/analytics/intensity-distribution"),
   getProgress: (metric, period) =>
     api.get("/analytics/progress", { params: { metric, period } }),
+  compareActivities: (firstId, secondId) =>
+    api.get("/analytics/compare", { params: { firstId, secondId } }),
 };
 
 export const dataAPI = {

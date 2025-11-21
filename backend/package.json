@@ -5,8 +5,8 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --env-file=.env src/server.js",
     "start": "node --env-file=.env src/server.js",
+    "dev": "nodemon --env-file=.env src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -30,6 +30,8 @@
     "passport-oauth2": "^1.8.0"
   },
   "devDependencies": {
+    "adm-zip": "^0.5.16",
+    "fast-xml-parser": "^5.3.2",
     "nodemon": "^3.0.2",
     "prisma": "^5.7.0"
   }

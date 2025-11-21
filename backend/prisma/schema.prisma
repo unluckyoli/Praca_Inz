@@ -72,6 +72,7 @@ model Activity {
   normalizedPower  Int?       // Normalized Power for cycling
   intensityFactor  Float?     // IF = NP / FTP
   createdAt        DateTime @default(now())
+  pacePerKm        Json?  @db.Json     
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   gpsPoints GpsPoint[]
