@@ -203,3 +203,40 @@
   border-radius: 8px;
   font-weight: 600;
 }
+
+
+.compare-section h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.split-info {
+  margin-top: 8px;
+  font-size: 0.875rem;
+}
+
+.split-info p {
+  margin: 0;
+}
+
+.pace-zones-summary {
+  margin-top: 12px;
+}
+
+.pace-zones-summary-row {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.pace-zones-summary h4 {
+  margin-bottom: 4px;
+}
+
+.pace-zones-summary ul {
+  list-style: disc;
+  margin: 4px 0 0 18px;
+  font-size: 0.875rem;
+}
+

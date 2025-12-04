@@ -106,6 +106,153 @@ function ComparePage() {
 
 
 
+    const formatSecondsShort = (seconds) => {
+    if (seconds == null) return "brak";
+    const s = Math.round(Math.abs(seconds));
+    return `${s}s`;
+  };
+
+  const formatSecondsDelta = (seconds) => {
+    if (seconds == null) return "0s";
+    const sign = seconds > 0 ? "+" : seconds < 0 ? "−" : "";
+    const s = Math.round(Math.abs(seconds));
+    return `${sign}${s}s/km`;
+  };
+
+  const formatPercent = (value) => {
+    if (value == null) return "brak";
+    return `${value.toFixed(1)}%`;
+  };
+
+  const paceZoneConfig = {
+    easy: { label: "≥ 6:00 min/km (łatwo)", color: "#a5b4fc" },
+    steady: { label: "5:00–5:59 min/km (umiarkowanie)", color: "#4f46e5" },
+    tempo: { label: "4:30–4:59 min/km (tempo)", color: "#10b981" },
+    fast: { label: "< 4:30 min/km (szybko)", color: "#f97316" },
+  };
+
+
+  const buildPaceZonesChartData = (first, second) => {
+  const z1 = first?.paceZones?.zones;
+  const z2 = second?.paceZones?.zones;
+  if (!z1 || !z2) return [];
+
+  return [
+    {
+      name: "Trening 1",
+      easy: z1.easy.km,
+      steady: z1.steady.km,
+      tempo: z1.tempo.km,
+      fast: z1.fast.km,
+    },
+    {
+      name: "Trening 2",
+      easy: z2.easy.km,
+      steady: z2.steady.km,
+      tempo: z2.tempo.km,
+      fast: z2.fast.km,
+    },
+  ];
+  };
+
+  const PaceZonesSection = ({ first, second }) => {
+    if (!first?.paceZones || !second?.paceZones) return null;
+
+    const chartData = buildPaceZonesChartData(first, second);
+    if (!chartData.length) return null;
+
+    const zones1 = first.paceZones.zones;
+    const zones2 = second.paceZones.zones;
+
+    return (
+      <div className="compare-section">
+        <h3>Strefy tempa</h3>
+
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart data={chartData}>
+            <XAxis dataKey="name" />
+            <YAxis unit=" km" />
+            <Tooltip />
+            <Legend />
+
+            <Bar dataKey="easy" stackId="pace" name={paceZoneConfig.easy.label} fill={paceZoneConfig.easy.color} />
+            <Bar dataKey="steady" stackId="pace" name={paceZoneConfig.steady.label} fill={paceZoneConfig.steady.color} />
+            <Bar dataKey="tempo" stackId="pace" name={paceZoneConfig.tempo.label} fill={paceZoneConfig.tempo.color} />
+            <Bar dataKey="fast" stackId="pace" name={paceZoneConfig.fast.label} fill={paceZoneConfig.fast.color} />
+          </BarChart>
+        </ResponsiveContainer>
+
+        <div className="pace-zones-summary">
+          <h4>Udział stref (w %)</h4>
+          <div className="pace-zones-summary-row">
+            <div>
+              <strong>Trening 1</strong>
+              <ul>
+                <li>Easy: {formatPercent(zones1.easy.percent)}</li>
+                <li>Steady: {formatPercent(zones1.steady.percent)}</li>
+                <li>Tempo: {formatPercent(zones1.tempo.percent)}</li>
+                <li>Fast: {formatPercent(zones1.fast.percent)}</li>
+              </ul>
+            </div>
+            <div>
+              <strong>Trening 2</strong>
+              <ul>
+                <li>Easy: {formatPercent(zones2.easy.percent)}</li>
+                <li>Steady: {formatPercent(zones2.steady.percent)}</li>
+                <li>Tempo: {formatPercent(zones2.tempo.percent)}</li>
+                <li>Fast: {formatPercent(zones2.fast.percent)}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+
+  const ClimbMetricsSection = ({ first, second }) => {
+  if (!first?.climbMetrics || !second?.climbMetrics) return null;
+
+  const c1 = first.climbMetrics;
+  const c2 = second.climbMetrics;
+
+  const data = [
+    {
+      name: "Przewyższenie (m/km)",
+      first: c1.elevPerKm,
+      second: c2.elevPerKm,
+    },
+    {
+      name: "prędkość pionowa (m/h)",
+      first: c1.verticalSpeed,
+      second: c2.verticalSpeed,
+    },
+    {
+      name: "średnie nachylenie (%)",
+      first: c1.avgGradientPercent,
+      second: c2.avgGradientPercent,
+    },
+  ];
+
+  return (
+    <div className="compare-section">
+      <h3>Parametry wspinaczkowe</h3>
+
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data}>
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="first" name="Trening 1" fill="#4f46e5"/>
+          <Bar dataKey="second" name="Trening 2" fill="#10b981" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
 
 
 
@@ -143,6 +290,74 @@ function ComparePage() {
   }, [comparison]);
 
   
+
+const PaceConsistencySection = ({ first, second }) => {
+  if (!first?.paceStats || !second?.paceStats) return null;
+
+  const s1 = first.paceStats;
+  const s2 = second.paceStats;
+
+  const cv1 = s1.cvPace != null ? s1.cvPace * 100 : null;
+  const cv2 = s2.cvPace != null ? s2.cvPace * 100 : null;
+
+  const data = [
+    {
+      name: "Odchylenie tempa (s/km)",
+      first: s1.stdDevSeconds,
+      second: s2.stdDevSeconds,
+    },
+    {
+      name: "Zmienność względna (%)",
+      first: cv1,
+      second: cv2,
+    },
+  ];
+
+  const formatSplitLabel = (stats) => {
+    if (!stats || stats.splitType === "brak") return "brak danych";
+
+    let label;
+    if (stats.splitType === "negative") {
+      label = "negative split (szybciej w drugiej połowie)";
+    } else if (stats.splitType === "positive") {
+      label = "positive split (wolniej w drugiej połowie)";
+    } else {
+      label = "równy bieg (even split)";
+    }
+
+    return `${label}, Δ ${formatSecondsShort(stats.splitDeltaSeconds)}`;
+  };
+
+  return (
+    <div className="compare-section">
+      <h3>Stabilność tempa i rozkład wysiłku</h3>
+
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data}>
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+
+          <Bar dataKey="first" name="Trening 1" fill="#4f46e5" />
+          <Bar dataKey="second" name="Trening 2" fill="#10b981" />
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="split-info">
+        <p><strong>Trening 1:</strong> {formatSplitLabel(s1)}</p>
+        <p><strong>Trening 2:</strong> {formatSplitLabel(s2)}</p>
+      </div>
+    </div>
+  );
+};
+
+
+
+
+
+
+
 
 
 
@@ -276,7 +491,9 @@ function ComparePage() {
               </div>
             </div>
 
-            {/* dystans / czas / prędkosc */}
+
+            {/* WYKRES 1*/}
+            {/* dystans / czas / predkosc */}
             {summaryChartData.length > 0 && (
               <div className="compare-chart-card">
                 <h3>Porównanie obciążeń (dystans / czas / prędkość)</h3>
@@ -304,6 +521,8 @@ function ComparePage() {
               </div>
             )}
 
+
+            {/* WYKRES 2*/}
             {/*  tempo na km  */}
             <div className="compare-chart-card">
               <h3>Tempo na poszczególnych kilometrach</h3>
@@ -320,6 +539,7 @@ function ComparePage() {
                       labelFormatter={(label) => `Kilometr ${label}`}
                     />
                     <Legend />
+
                     <Line
                       type="monotone"
                       dataKey="first"
@@ -343,6 +563,37 @@ function ComparePage() {
                 </p>
               )}
             </div>
+
+
+            {/* WYKRES 3*/}
+            {/*stabilnosc + split */}
+            <div className="compare-chart-card">
+              <PaceConsistencySection
+                first={comparison.first}
+                second={comparison.second}
+              />
+            </div>
+
+
+            {/* WYKRES 4*/}
+            {/* strefy tempa */}
+            <div className="compare-chart-card">
+              <PaceZonesSection
+                first={comparison.first}
+                second={comparison.second}
+              />
+            </div>
+
+            
+            {/* WYKRES 5*/}
+            {/* sekcja wspinaczkowa */}
+            <div className="compare-chart-card">
+              <ClimbMetricsSection
+                first={comparison.first}
+                second={comparison.second}
+              />
+            </div>
+
 
             {/* TABELA PARAMETROW */}
             <div className="compare-table-wrapper">
