@@ -3,8 +3,8 @@ import { useState } from "react";
 import "./ActivityModal.css";
 
 function ActivityModal({ activity, onClose }) {
-  const [showBestEfforts, setShowBestEfforts] = useState(true);
-  const [showLaps, setShowLaps] = useState(true);
+  const [showBestEfforts, setShowBestEfforts] = useState(false);
+  const [showLaps, setShowLaps] = useState(false);
   const [selectedLap, setSelectedLap] = useState(null);
 
   if (!activity) return null;
@@ -136,7 +136,7 @@ function ActivityModal({ activity, onClose }) {
               </div>
             )}
 
-            {activity.elevationGain && (
+            {activity.elevationGain !== undefined && activity.elevationGain !== null && (
               <div className="detail-item">
                 <span className="detail-label">Przewyższenie</span>
                 <span className="detail-value">{activity.elevationGain} m</span>
@@ -174,23 +174,17 @@ function ActivityModal({ activity, onClose }) {
                     <div key={index} className="effort-item">
                       <h4>{effort.name}</h4>
                       <div className="effort-stat">
-                        <span className="label">Czas</span>
-                        <span className="value">{formatEffortTime(effort.elapsed_time)}</span>
-                      </div>
-                      <div className="effort-stat">
                         <span className="label">Dystans</span>
                         <span className="value">{(effort.distance / 1000).toFixed(2)} km</span>
+                      </div>
+                      <div className="effort-stat">
+                        <span className="label">Czas</span>
+                        <span className="value">{formatEffortTime(effort.elapsed_time)}</span>
                       </div>
                       <div className="effort-stat">
                         <span className="label">Tempo</span>
                         <span className="value">{formatPace(effort.elapsed_time, effort.distance)}</span>
                       </div>
-                      {effort.moving_time && effort.moving_time !== effort.elapsed_time && (
-                        <div className="effort-stat">
-                          <span className="label">Czas ruchu</span>
-                          <span className="value">{formatEffortTime(effort.moving_time)}</span>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -200,12 +194,17 @@ function ActivityModal({ activity, onClose }) {
 
           {hasLaps && (
             <div className="laps-section">
-              <div className="laps-header">
-                <h3>📊 Odcinki (Laps) - {activity.laps.length}</h3>
-                <p className="laps-subtitle">Kliknij na kolumnę aby zobaczyć szczegóły</p>
-              </div>
+              <button 
+                className="best-efforts-toggle"
+                onClick={() => setShowLaps(!showLaps)}
+              >
+                <h3>Odcinki</h3>
+                {showLaps ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+              </button>
               
-              <div className="laps-chart">
+              {showLaps && (
+                <>
+                  <div className="laps-chart">
                 {activity.laps.map((lap, index) => {
                   const paceSecondsPerKm = getPaceValue(lap);
                   
@@ -213,7 +212,7 @@ function ActivityModal({ activity, onClose }) {
                   const paceRange = maxPaceValue - minPaceValue;
                   if (paceRange > 0) {
                     const normalized = (maxPaceValue - paceSecondsPerKm) / paceRange;
-                    heightPercent =  normalized * 80;
+                    heightPercent =  normalized * 80 + 5;
                   }
                   
                   const totalDistance = activity.laps.reduce((sum, l) => sum + l.distance, 0);
@@ -245,7 +244,7 @@ function ActivityModal({ activity, onClose }) {
               {selectedLap !== null && activity.laps[selectedLap] && (
                 <div className="lap-details">
                   <div className="lap-details-header">
-                    <h4>🏁 Odcinek {selectedLap + 1}</h4>
+                    <h4>Odcinek {selectedLap + 1}</h4>
                     <button 
                       className="lap-close"
                       onClick={() => setSelectedLap(null)}
@@ -296,7 +295,8 @@ function ActivityModal({ activity, onClose }) {
                         <span className="value">{activity.laps[selectedLap].average_watts} W</span>
                       </div>
                     )}
-                    {activity.laps[selectedLap].total_elevation_gain && (
+                    {activity.laps[selectedLap].total_elevation_gain !== undefined && 
+                     activity.laps[selectedLap].total_elevation_gain !== null && (
                       <div className="lap-detail-item">
                         <span className="label">Przewyższenie</span>
                         <span className="value">{activity.laps[selectedLap].total_elevation_gain} m</span>
@@ -308,6 +308,8 @@ function ActivityModal({ activity, onClose }) {
                     </div>
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
           )}
