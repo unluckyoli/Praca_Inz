@@ -135,10 +135,13 @@ if (params.get("auth") === "success") {
       alert(message);
     } catch (error) {
       console.error("Sync error:", error);
-      if (error.response?.data?.requiresStravaLink) {
+      if (error.response?.status === 401 || error.response?.data?.requiresStravaLink) {
+        // Token wygasł lub wymaga ponownej autoryzacji
+        await fetchUserData(); // Odśwież dane użytkownika, aby zaktualizować status połączenia
+        
         const confirmLink = confirm(
-          "Twoje konto Strava wymaga ponownej autoryzacji.\n\n" +
-            "Czy chcesz przejść do ustawień konta?",
+          "Twoje połączenie ze Stravą wygasło i wymaga ponownej autoryzacji.\n\n" +
+            "Czy chcesz przejść do ustawień konta, aby połączyć się ponownie?",
         );
         if (confirmLink) {
           navigate("/account");

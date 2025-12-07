@@ -165,6 +165,14 @@ export const getCurrentUser = async (req, res) => {
     const isStravaEmail = user.email && user.email.includes('@strava.local');
     const displayEmail = isStravaEmail ? null : user.email;
 
+    let isStravaConnected = false;
+    if (user.stravaId && user.stravaAccessToken) {
+      const now = new Date();
+      const expiresAt = user.stravaTokenExpiresAt;
+      
+      isStravaConnected = !expiresAt || now < expiresAt;
+    }
+
     res.json({
       user: {
         id: user.id,
@@ -173,7 +181,7 @@ export const getCurrentUser = async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         isEmailVerified: user.isEmailVerified,
-        hasStravaData: !!user.stravaId,
+        hasStravaData: isStravaConnected,
         hasGarminData: !!user.garminId,
         stats: user.userStats,
       },
@@ -191,7 +199,6 @@ export const stravaAuth = (req, res) => {
 
   let userId = null;
 
-  // Jeśli token jest w query, weryfikuj go
   if (tokenFromQuery) {
     try {
       const decoded = jwtService.verifyAccessToken(tokenFromQuery);
@@ -200,8 +207,7 @@ export const stravaAuth = (req, res) => {
       console.error("Invalid token in query:", error);
     }
   }
-  
-  // Fallback do req.user (z middleware)
+
   if (!userId && mode === "connect" && req.user?.userId) {
     userId = req.user.userId;
   }
@@ -220,8 +226,6 @@ export const stravaAuth = (req, res) => {
 
   return res.redirect(url);
 };
-
-
 
 
 export const stravaCallback = async (req, res) => {
@@ -251,7 +255,6 @@ export const stravaCallback = async (req, res) => {
         );
       }
 
-      // Check if this Strava account is already connected to another user
       const existingStravaUser = await prisma.user.findUnique({
         where: { stravaId },
       });
@@ -327,8 +330,6 @@ export const stravaCallback = async (req, res) => {
 
 
 
-
-
     req.session = null;
 
     const jwtAccess = jwtService.generateAccessToken(user.id);
@@ -371,12 +372,10 @@ export const unlinkStrava = async (req, res) => {
   }
 };
 
-// Funkcja pomocnicza do synchronizacji aktywności ze Stravą
 async function syncStravaActivities(userId, accessToken) {
   try {
     console.log(`Fetching activities from Strava for user ${userId}...`);
     
-    // Pobierz wszystkie aktywności z paginacją
     let allStravaActivities = [];
     let page = 1;
     let hasMore = true;
