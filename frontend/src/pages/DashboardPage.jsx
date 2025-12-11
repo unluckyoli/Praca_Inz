@@ -23,6 +23,8 @@ function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [activitiesPerPage] = useState(10);
   const navigate = useNavigate();
   const { activityType, dateRange } = useFilters();
   const params = new URLSearchParams(window.location.search);
@@ -45,6 +47,7 @@ if (params.get("auth") === "success") {
   useEffect(() => {
     if (!loading) {
       fetchActivities();
+      setCurrentPage(1); // Reset to first page when filters change
     }
   }, [activityType, dateRange?.start, dateRange?.end, loading]);
 
@@ -82,7 +85,7 @@ if (params.get("auth") === "success") {
       const activitiesData = await activitiesAPI.getActivities(params);
       const fetchedActivities = activitiesData.data.activities || [];
       
-      setActivities(fetchedActivities.slice(0, 50));
+      setActivities(fetchedActivities);
 
       const stats = {
         totalActivities: fetchedActivities.length,
@@ -299,54 +302,80 @@ if (params.get("auth") === "success") {
               treningi.
             </p>
           ) : (
-            <div className="activities-list">
-              {activities.map((activity) => (
-                <div 
-                  key={activity.id} 
-                  className="activity-item"
-                  onClick={() => handleActivityClick(activity.id)}
-                  style={{ 
-                    cursor: 'pointer',
-                    borderLeft: `4px solid ${getActivityTypeColor(activity.type)}`
-                  }}
-                >
-                  <div className="activity-info">
-                    <h4>{activity.name}</h4>
-                    <p 
-                      className="activity-type"
-                      style={{ color: getActivityTypeColor(activity.type) }}
+            <>
+              <div className="activities-list">
+                {activities
+                  .slice((currentPage - 1) * activitiesPerPage, currentPage * activitiesPerPage)
+                  .map((activity) => (
+                    <div 
+                      key={activity.id} 
+                      className="activity-item"
+                      onClick={() => handleActivityClick(activity.id)}
+                      style={{ 
+                        cursor: 'pointer',
+                        borderLeft: `4px solid ${getActivityTypeColor(activity.type)}`
+                      }}
                     >
-                      {activity.type}
-                    </p>
-                    <p className="activity-date">
-                      {new Date(activity.startDate).toLocaleDateString("pl-PL")}
-                    </p>
-                  </div>
-                  <div className="activity-stats">
-                    <div className="activity-stat">
-                      <span className="label">Dystans</span>
-                      <span className="value">
-                        {(activity.distance / 1000).toFixed(2)} km
-                      </span>
-                    </div>
-                    <div className="activity-stat">
-                      <span className="label">Czas</span>
-                      <span className="value">
-                        {Math.floor(activity.duration / 60)} min
-                      </span>
-                    </div>
-                    {activity.averageHeartRate && (
-                      <div className="activity-stat">
-                        <span className="label">Śr. tętno</span>
-                        <span className="value">
-                          {activity.averageHeartRate} bpm
-                        </span>
+                      <div className="activity-info">
+                        <h4>{activity.name}</h4>
+                        <p 
+                          className="activity-type"
+                          style={{ color: getActivityTypeColor(activity.type) }}
+                        >
+                          {activity.type}
+                        </p>
+                        <p className="activity-date">
+                          {new Date(activity.startDate).toLocaleDateString("pl-PL")}
+                        </p>
                       </div>
-                    )}
-                  </div>
+                      <div className="activity-stats">
+                        <div className="activity-stat">
+                          <span className="label">Dystans</span>
+                          <span className="value">
+                            {(activity.distance / 1000).toFixed(2)} km
+                          </span>
+                        </div>
+                        <div className="activity-stat">
+                          <span className="label">Czas</span>
+                          <span className="value">
+                            {Math.floor(activity.duration / 60)} min
+                          </span>
+                        </div>
+                        {activity.averageHeartRate && (
+                          <div className="activity-stat">
+                            <span className="label">Śr. tętno</span>
+                            <span className="value">
+                              {activity.averageHeartRate} bpm
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              
+              {activities.length > activitiesPerPage && (
+                <div className="pagination">
+                  <button
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Poprzednia
+                  </button>
+                  <span className="pagination-info">
+                    Strona {currentPage} z {Math.ceil(activities.length / activitiesPerPage)}
+                  </span>
+                  <button
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(activities.length / activitiesPerPage)))}
+                    disabled={currentPage === Math.ceil(activities.length / activitiesPerPage)}
+                  >
+                    Następna
+                  </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 
