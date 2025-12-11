@@ -67,7 +67,10 @@ function GlobalFilters({
       <div className="filters-content">
         {showType && (
           <div className="filter-group">
-            <label htmlFor="activity-type">Typ aktywności</label>
+            <label htmlFor="activity-type">
+              <Calendar size={16} />
+              Typ aktywności
+            </label>
             <select
               id="activity-type"
               value={activityType}

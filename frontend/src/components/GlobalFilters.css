@@ -79,6 +79,7 @@
   color: #1f2937;
   background: white;
   cursor: pointer;
+  margin-top: 1.30rem;
   transition: all 0.2s;
   font-family: inherit;
 }
@@ -120,6 +121,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+  /* margin-top: 0.5rem; */
 }
 
 .date-input-wrapper {
@@ -140,7 +142,7 @@
   padding: 0.75rem 1rem;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: #1f2937;
   background: white;
   cursor: pointer;
