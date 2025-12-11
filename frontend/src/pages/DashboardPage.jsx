@@ -47,7 +47,7 @@ if (params.get("auth") === "success") {
   useEffect(() => {
     if (!loading) {
       fetchActivities();
-      setCurrentPage(1); // Reset to first page when filters change
+      setCurrentPage(1); 
     }
   }, [activityType, dateRange?.start, dateRange?.end, loading]);
 
