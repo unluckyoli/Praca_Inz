@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { RefreshCw, LogOut } from "lucide-react";
 import Layout from "../components/Layout";
 import GlobalFilters from "../components/GlobalFilters";
+import ActivityModal from "../components/ActivityModal";
 import { useFilters } from "../context/FilterContext";
 import { useAuth } from "../hooks/useAuth";
 import { authAPI, activitiesAPI } from "../services/api";
@@ -20,6 +21,8 @@ function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState(null);
+  const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
   const { activityType, dateRange } = useFilters();
   const params = new URLSearchParams(window.location.search);
@@ -175,6 +178,16 @@ if (params.get("auth") === "success") {
     }
   };
 
+  const handleActivityClick = async (activityId) => {
+    try {
+      const res = await activitiesAPI.getActivityById(activityId);
+      setSelectedActivity(res.data.activity);
+      setShowModal(true);
+    } catch (error) {
+      console.error("Fetch activity details error:", error);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await authAPI.logout();
@@ -271,7 +284,12 @@ if (params.get("auth") === "success") {
           ) : (
             <div className="activities-list">
               {activities.map((activity) => (
-                <div key={activity.id} className="activity-item">
+                <div 
+                  key={activity.id} 
+                  className="activity-item"
+                  onClick={() => handleActivityClick(activity.id)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <div className="activity-info">
                     <h4>{activity.name}</h4>
                     <p className="activity-type">{activity.type}</p>
@@ -306,6 +324,13 @@ if (params.get("auth") === "success") {
             </div>
           )}
         </div>
+
+        {showModal && selectedActivity && (
+          <ActivityModal
+            activity={selectedActivity}
+            onClose={() => setShowModal(false)}
+          />
+        )}
       </div>
     </Layout>
   );

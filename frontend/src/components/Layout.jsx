@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, BarChart3, Database, Trophy, Calendar, User, GitCompare, ListChecks } from "lucide-react";
+import { Home, BarChart3, Trophy, Calendar, User, GitCompare, ListChecks } from "lucide-react";
 import "./Layout.css";
 
 function Layout({ children }) {
@@ -9,7 +9,6 @@ function Layout({ children }) {
   const navItems = [
     { path: "/dashboard", icon: Home, label: "Panel" },
     { path: "/analytics", icon: BarChart3, label: "Analizuj" },
-    { path: "/data", icon: Database, label: "Dane" },
     { path: "/best-efforts", icon: Trophy, label: "Best Efforts" },
     { path: "/training-plan", icon: Calendar, label: "Plan treningowy" },
     { path: "/training-plans", icon: ListChecks, label: "Moje plany" },

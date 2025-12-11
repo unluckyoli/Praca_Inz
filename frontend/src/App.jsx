@@ -8,7 +8,6 @@ import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import AccountPage from "./pages/AccountPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import DataPage from "./pages/DataPage";
 import BestEffortsPage from "./pages/BestEffortsPage";
 import TrainingPlanPage from "./pages/TrainingPlanPage";
 import MyTrainingPlansPage from "./pages/MyTrainingPlansPage";
@@ -55,7 +54,6 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/data" element={<DataPage />} />
           <Route path="/best-efforts" element={<BestEffortsPage />} />
           <Route path="/training-plan" element={<TrainingPlanPage />} />
           <Route path="/training-plans" element={<MyTrainingPlansPage />} />
