@@ -8,6 +8,8 @@ import { useFilters } from "../context/FilterContext";
 import { useAuth } from "../hooks/useAuth";
 import { authAPI, activitiesAPI } from "../services/api";
 import "./DashboardPage.css";
+import {Flame} from "lucide-react";
+import { goalsAPI } from "../services/api";
 
 function DashboardPage() {
   const { isLoading: authLoading } = useAuth();
@@ -57,6 +59,7 @@ if (params.get("auth") === "success") {
       setUser(data.user);
 
       await fetchActivities();
+      await fetchGoal();
     } catch (error) {
       if (error.response?.status === 401) {
         navigate("/");
@@ -104,6 +107,44 @@ if (params.get("auth") === "success") {
       });
     }
   };
+
+
+  const [goalData, setGoalData] = useState(null);
+
+  const fetchGoal = async () => {
+    try {
+      const { data } = await goalsAPI.getCurrent();
+      setGoalData(data);
+    } catch (e) {
+    }
+  };
+
+
+
+  const goalUnit = (goal) => {
+  if (!goal) return "";
+  switch (goal.type) {
+    case "DISTANCE_KM": return "km";
+    case "DURATION_MIN": return "min";
+    case "ELEVATION_M": return "m";
+    case "ACTIVITIES_COUNT": return "treningów";
+    default: return "";
+    }
+  };
+
+  const goalLabel = (goal) => {
+    if (!goal) return "";
+    const period = goal.period === "WEEK" ? "w tym tygodniu" : "w tym miesiącu";
+    switch (goal.type) {
+      case "DISTANCE_KM": return `Dystans ${period}`;
+      case "DURATION_MIN": return `Czas ${period}`;
+      case "ELEVATION_M": return `Przewyższenie ${period}`;
+      case "ACTIVITIES_COUNT": return `Liczba treningów ${period}`;
+      default: return `Cel ${period}`;
+    }
+  };
+
+
 
   const handleSync = async () => {
     if (!user?.hasStravaData) {
@@ -265,6 +306,45 @@ if (params.get("auth") === "success") {
             </button>
           </div>
         </div>
+
+        <div
+          className={`goal-tile ${goalData?.goal ? "goal-active" : "goal-empty"}`}
+          onClick={() => navigate("/goals")}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && navigate("/goals")}
+        >
+          <div className="goal-tile-left">
+            <div className="goal-icon">
+              <Flame size={26} />
+            </div>
+                    
+            <div className="goal-text">
+              <div className="goal-title">Cel i postęp</div>
+                    
+              {goalData?.goal ? (
+                <div className="goal-sub">
+                  {goalLabel(goalData.goal)} ·{" "}
+                  <strong>
+                    {goalData.progress.current} / {goalData.progress.target} {goalData.progress.unit}
+                  </strong>
+                </div>
+              ) : (
+                <div className="goal-sub muted">Nie ustawiono celu — kliknij, aby dodać</div>
+              )}
+            </div>
+          </div>
+            
+          {goalData?.goal && (
+            <div className="goal-right">
+              <div className="goal-percent">{goalData.progress.percent}%</div>
+              <div className="goal-bar">
+                <div className="goal-bar-fill" style={{ width: `${goalData.progress.percent}%` }} />
+              </div>
+            </div>
+          )}
+        </div>
+
 
         <GlobalFilters showMetric={false} />
 

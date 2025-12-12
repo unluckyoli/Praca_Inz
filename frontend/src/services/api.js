@@ -231,4 +231,12 @@ export const trainingPlanAPI = {
   deletePlan: (planId) => api.delete(`/training-plan/my-plans/${planId}`),
 };
 
+
+export const goalsAPI = {
+  getCurrent: () => api.get("/goals/current"),
+  create: (payload) => api.post("/goals", payload),
+  history: () => api.get("/goals/history"),
+};
+
+
 export default api;
