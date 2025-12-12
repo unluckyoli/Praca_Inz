@@ -94,7 +94,8 @@ model Activity {
   powerCurve       PowerCurve?
   segmentEfforts   SegmentEffort[]
 
-  @@unique([externalId, source])
+  //@@unique([externalId, source])
+  @@unique([userId, externalId, source])
   @@index([userId])
   @@index([startDate])
 }

@@ -131,6 +131,14 @@ function ComparePage() {
     fast: { label: "< 4:30 min/km (szybko)", color: "#f97316" },
   };
 
+  const loadLegend = [
+      { label: "Bardzo lekki", range: "< 50", desc: "regeneracja, bardzo spokojny trening" },
+      { label: "Lekki", range: "50–120", desc: "komfortowy wysiłek, baza tlenowa" },
+      { label: "Średni", range: "120–220", desc: "solidny trening, wyraźne zmęczenie" },
+      { label: "Ciężki", range: "220–350", desc: "mocny bodziec, po którym potrzebna jest regeneracja" },
+      { label: "Bardzo ciężki", range: "> 350", desc: "bardzo wymagający trening / zawody" },
+    ];
+
 
   const buildPaceZonesChartData = (first, second) => {
   const z1 = first?.paceZones?.zones;
@@ -182,7 +190,7 @@ function ComparePage() {
           </BarChart>
         </ResponsiveContainer>
 
-        <div className="pace-zones-summary">
+        <div className="compare-legend">
           <h4>Udział stref (w %)</h4>
           <div className="pace-zones-summary-row">
             <div>
@@ -256,107 +264,250 @@ function ComparePage() {
 
 
 
-  const summaryChartData = useMemo(() => {
-    if (!comparison) return [];
 
-    const { first, second } = comparison;
+  const TrainingLoadSection = ({ first, second }) => {
 
-    const distance1 = first.distance ? first.distance / 1000 : null;
-    const distance2 = second.distance ? second.distance / 1000 : null;
+    if (!first?.trainingLoad && !second?.trainingLoad) return null;
 
-    const duration1 = first.duration ? first.duration / 60 : null; // minuty
-    const duration2 = second.duration ? second.duration / 60 : null;
+    const duration1h = first.duration ? first.duration / 3600 : null;
+    const duration2h = second.duration ? second.duration / 3600 : null;
+    const distance1km = first.distance ? first.distance / 1000 : null;
+    const distance2km = second.distance ? second.distance / 1000 : null;
 
-    const speed1 = first.averageSpeed ? first.averageSpeed * 3.6 : null; // km/h
-    const speed2 = second.averageSpeed ? second.averageSpeed * 3.6 : null;
-
-    return [
+    const rows = [
       {
-        metric: "Dystans (km)",
-        first: distance1,
-        second: distance2,
+        name: "Obciążenie (Strava score)",
+        first: first.trainingLoad ?? null,
+        second: second.trainingLoad ?? null,
       },
       {
-        metric: "Czas (minuty)",
-        first: duration1,
-        second: duration2,
+        name: "Obciążenie na godzinę",
+        first:
+          first.trainingLoad && duration1h
+            ? first.trainingLoad / duration1h
+            : null,
+        second:
+          second.trainingLoad && duration2h
+            ? second.trainingLoad / duration2h
+            : null,
       },
       {
-        metric: "Śr. prędkość (km/h)",
-        first: speed1,
-        second: speed2,
+        name: "Obciążenie na km",
+        first:
+          first.trainingLoad && distance1km
+            ? first.trainingLoad / distance1km
+            : null,
+        second:
+          second.trainingLoad && distance2km
+            ? second.trainingLoad / distance2km
+            : null,
       },
     ].filter((row) => row.first != null || row.second != null);
-  }, [comparison]);
 
-  
+    if (rows.length === 0) return null;
 
-const PaceConsistencySection = ({ first, second }) => {
-  if (!first?.paceStats || !second?.paceStats) return null;
+    return (
+      <div className="compare-section">
+        <h3>Obciążenie treningowe</h3>
 
-  const s1 = first.paceStats;
-  const s2 = second.paceStats;
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={rows}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="first" name="Trening 1" fill="#4f46e5" />
+            <Bar dataKey="second" name="Trening 2" fill="#10b981" />
+          </BarChart>
+        </ResponsiveContainer>
 
-  const cv1 = s1.cvPace != null ? s1.cvPace * 100 : null;
-  const cv2 = s2.cvPace != null ? s2.cvPace * 100 : null;
+        
 
-  const data = [
-    {
-      name: "Odchylenie tempa (s/km)",
-      first: s1.stdDevSeconds,
-      second: s2.stdDevSeconds,
-    },
-    {
-      name: "Zmienność względna (%)",
-      first: cv1,
-      second: cv2,
-    },
-  ];
+        <p className="compare-hint">
+          Obciążenie jest liczone na podstawie dystansu, tempa biegu i przewyższenia.{" "}
+          To własny wskaźnik aplikacji: rośnie, gdy trening jest dłuższy, szybszy
+          albo bardziej górzysty.
+          load = distance(km) * intensity * 10 + elevationGain * 0.1
+        </p>
 
-  const formatSplitLabel = (stats) => {
-    if (!stats || stats.splitType === "brak") return "brak danych";
-
-    let label;
-    if (stats.splitType === "negative") {
-      label = "negative split (szybciej w drugiej połowie)";
-    } else if (stats.splitType === "positive") {
-      label = "positive split (wolniej w drugiej połowie)";
-    } else {
-      label = "równy bieg (even split)";
-    }
-
-    return `${label}, Δ ${formatSecondsShort(stats.splitDeltaSeconds)}`;
+        <div className="compare-legend">
+            <h4>Jak czytać obciążenie?</h4>
+            <ul>
+              {loadLegend.map((item) => (
+                <li key={item.label}>
+                  <strong>{item.label}</strong>{" "} <span className="range">({item.range})</span>{" "}
+                  <span className="desc">– {item.desc}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+      </div>
+    );
   };
 
-  return (
-    <div className="compare-section">
-      <h3>Stabilność tempa i rozkład wysiłku</h3>
 
-      <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data}>
-          <XAxis dataKey="name" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
 
-          <Bar dataKey="first" name="Trening 1" fill="#4f46e5" />
-          <Bar dataKey="second" name="Trening 2" fill="#10b981" />
-        </BarChart>
-      </ResponsiveContainer>
 
-      <div className="split-info">
-        <p><strong>Trening 1:</strong> {formatSplitLabel(s1)}</p>
-        <p><strong>Trening 2:</strong> {formatSplitLabel(s2)}</p>
+
+    const summaryChartData = useMemo(() => {
+      if (!comparison) return [];
+
+      const { first, second } = comparison;
+
+      const distance1 = first.distance ? first.distance / 1000 : null;
+      const distance2 = second.distance ? second.distance / 1000 : null;
+
+      const duration1 = first.duration ? first.duration / 60 : null; // minuty
+      const duration2 = second.duration ? second.duration / 60 : null;
+
+      const speed1 = first.averageSpeed ? first.averageSpeed * 3.6 : null; // km/h
+      const speed2 = second.averageSpeed ? second.averageSpeed * 3.6 : null;
+
+      return [
+        {
+          metric: "Dystans (km)",
+          first: distance1,
+          second: distance2,
+        },
+        {
+          metric: "Czas (minuty)",
+          first: duration1,
+          second: duration2,
+        },
+        {
+          metric: "Śr. prędkość (km/h)",
+          first: speed1,
+          second: speed2,
+        },
+      ].filter((row) => row.first != null || row.second != null);
+    }, [comparison]);
+
+
+
+  const PaceConsistencySection = ({ first, second }) => {
+    if (!first?.paceStats || !second?.paceStats) return null;
+
+    const s1 = first.paceStats;
+    const s2 = second.paceStats;
+
+    const cv1 = s1.cvPace != null ? s1.cvPace * 100 : null;
+    const cv2 = s2.cvPace != null ? s2.cvPace * 100 : null;
+
+    const data = [
+      {
+        name: "Odchylenie tempa (s/km)",
+        first: s1.stdDevSeconds,
+        second: s2.stdDevSeconds,
+      },
+      {
+        name: "Zmienność względna (%)",
+        first: cv1,
+        second: cv2,
+      },
+    ];
+
+    const formatSplitLabel = (stats) => {
+      if (!stats || stats.splitType === "brak") return "brak danych";
+
+      let label;
+      if (stats.splitType === "negative") {
+        label = "negative split (szybciej w drugiej połowie)";
+      } else if (stats.splitType === "positive") {
+        label = "positive split (wolniej w drugiej połowie)";
+      } else {
+        label = "równy bieg (even split)";
+      }
+
+      return `${label}, Δ ${formatSecondsShort(stats.splitDeltaSeconds)}`;
+    };
+
+    return (
+      <div className="compare-section">
+        <h3>Stabilność tempa i rozkład wysiłku</h3>
+
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={data}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+
+            <Bar dataKey="first" name="Trening 1" fill="#4f46e5" />
+            <Bar dataKey="second" name="Trening 2" fill="#10b981" />
+          </BarChart>
+        </ResponsiveContainer>
+
+        <div className="compare-legend">
+          <h4>Jak interpretować splity?</h4>
+          <div className="split-info">
+            <p><strong>Trening 1:</strong> {formatSplitLabel(s1)}</p>
+            <p><strong>Trening 2:</strong> {formatSplitLabel(s2)}</p>
+          </div>
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
 
 
 
 
+  // const getLoadFormData = () => {
+  //   if (!comparison?.first || !comparison?.second) return [];
 
+  //   const a = comparison.first;
+  //   const b = comparison.second;
+
+  //   // zabezpieczenia, żeby nie wywaliło się na nullach
+  //   const psA = a.paceStats || {};
+  //   const psB = b.paceStats || {};
+  //   const climbA = a.climbMetrics || {};
+  //   const climbB = b.climbMetrics || {};
+
+  //   const distA = (a.distance || 0) / 1000;
+  //   const distB = (b.distance || 0) / 1000;
+
+  //   return [
+  //     {
+  //       name: "Średnie tempo (min/km)",
+  //       [a.name]: psA.meanPace ?? null,
+  //       [b.name]: psB.meanPace ?? null,
+  //     },
+  //     {
+  //       name: "Zmienność tempa (s)",
+  //       [a.name]: psA.stdDevSeconds ?? null,
+  //       [b.name]: psB.stdDevSeconds ?? null,
+  //     },
+  //     {
+  //       name: "Różnica 1. vs 2. połowa (s)",
+  //       [a.name]: psA.splitDeltaSeconds ?? null,
+  //       [b.name]: psB.splitDeltaSeconds ?? null,
+  //     },
+  //     {
+  //       name: "Dystans (km)",
+  //       [a.name]: distA,
+  //       [b.name]: distB,
+  //     },
+  //     {
+  //       name: "Średnie nachylenie (%)",
+  //       [a.name]: climbA.avgGradientPercent ?? 0,
+  //       [b.name]: climbB.avgGradientPercent ?? 0,
+  //     },
+  //   ];
+  // };
+
+
+
+
+  const computeAvgPace = (activity) => {
+    if (!activity?.distance || !activity?.duration) return null;
+    const km = activity.distance / 1000;
+    if (km <= 0) return null;
+    const pace = (activity.duration / 60) / km; // min/km
+    if (!Number.isFinite(pace) || pace <= 0) return null;
+    return pace;
+  };
 
 
 
@@ -459,8 +610,14 @@ const PaceConsistencySection = ({ first, second }) => {
                 </select>
               </div>
 
-                <div className="flex justify-end mt-4">
-                  <button className="purple-button" onClick={handleCompare}>Porównaj</button>
+                <div className="compare-actions">
+                <button
+                  className="purple-button"
+                  onClick={handleCompare}
+                  disabled={loadingCompare}
+                  >
+                  {loadingCompare ? "Porównuję..." : "Porównaj"}
+                </button>
                 </div>
 
             </div>
@@ -597,6 +754,19 @@ const PaceConsistencySection = ({ first, second }) => {
             </div>
 
 
+
+            {/* WYKRES 6 */}
+            {/* obciążenie treningowe */}
+            <div className="compare-chart-card">
+              <TrainingLoadSection
+                first={comparison.first}
+                second={comparison.second}
+              />
+            </div>
+
+
+
+
             {/* TABELA PARAMETROW */}
             <div className="compare-table-wrapper">
               <h3>Porównanie parametrów</h3>
@@ -656,6 +826,25 @@ const PaceConsistencySection = ({ first, second }) => {
                     </td>
                   </tr>
                   <tr>
+                    <td>Średnie tempo (cały bieg)</td>
+                    <td>
+                      {renderValueWithHighlight(
+                        computeAvgPace(comparison.first),
+                        computeAvgPace(comparison.second),
+                        false,
+                        (v) => formatPaceMinPerKm(v),
+                      )}
+                    </td>
+                    <td>
+                      {renderValueWithHighlight(
+                        computeAvgPace(comparison.second),
+                        computeAvgPace(comparison.first),
+                        false,
+                        (v) => formatPaceMinPerKm(v),
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
                     <td>Średnie tętno</td>
                     <td>
                       {comparison.first.averageHeartRate ?? "brak"}
@@ -701,6 +890,12 @@ const PaceConsistencySection = ({ first, second }) => {
                     <td>{comparison.first.calories ?? "brak"}</td>
                     <td>{comparison.second.calories ?? "brak"}</td>
                   </tr>
+                  <tr>
+                    <td>Obciążenie treningowe</td>
+                    <td>{comparison.first.trainingLoad ?? "brak"}</td>
+                    <td>{comparison.second.trainingLoad ?? "brak"}</td>
+                  </tr>
+
                 </tbody>
               </table>
               <p className="compare-hint">

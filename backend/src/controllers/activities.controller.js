@@ -137,12 +137,11 @@ export const syncActivities = async (req, res) => {
       console.log(`Fetched ${allStravaActivities.length} new activities from Strava`);
 
       for (const activity of allStravaActivities) {
-        const existing = await prisma.activity.findUnique({
+        const existing = await prisma.activity.findFirst({
         where: {
-          externalId_source: {
+          userId,
             externalId: activity.id.toString(),
             source: "STRAVA",
-          },
         },
         include: {
           paceDistance: true,
@@ -202,12 +201,17 @@ export const syncActivities = async (req, res) => {
 
           console.log("TYPE RAW:", rawType, "DIST:", activity.distance); 
 
-          const isRunning =
+          const isDistanceBased =
             rawType.includes("run") ||       
-            rawType.includes("jog") ||       
+            rawType.includes("jog") ||
+            rawType.includes("ride") ||       
+            rawType.includes("hike") ||       
+            rawType.includes("walk") ||       
+            rawType.includes("virtualrun") ||       
+            rawType.includes("virtualride") ||       
             rawType.includes("workout");     
 
-          if (isRunning && activity.distance > 300) {  
+          if (isDistanceBased && activity.distance > 300) {  
             await calculatePaceDistances(created.id, userId, accessToken, activity.id);
           }
 
@@ -251,7 +255,7 @@ export const syncActivities = async (req, res) => {
           updatedActivities++;
 
 
-          if (!existing.paceDistance && !existing.pacePerKm) {
+          if (!existing.pacePerKm) {
            try {
              await calculatePaceDistances(existing.id, userId, accessToken, activity.id);
              console.log(`Recalculated pace data for existing activity ${existing.name}`);
@@ -437,7 +441,6 @@ export const recalculatePaceData = async (req, res) => {
     const activities = await prisma.activity.findMany({
       where: {
         userId,
-        type: { in: ["Run", "VirtualRun"] },
       },
       orderBy: { startDate: "desc" },
     });
@@ -733,7 +736,7 @@ async function calculatePaceDistances(
                 Math.abs(dist - targetMeters) / targetMeters < 0.02 &&
                 time > 0
               ) {
-                const pace = time / 60 / (dist / 1000); // min/km
+                const pace = (time / 60) / (dist / 1000); // min/km
 
                 if (pace < bestPace && pace > 0 && pace < 20) {
                   bestPace = pace;

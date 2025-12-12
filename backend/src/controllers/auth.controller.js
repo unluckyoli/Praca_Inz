@@ -413,6 +413,16 @@ export const stravaCallback = async (req, res) => {
       console.log(`Automatic sync completed for user ${userId}`);
     } catch (syncError) {
       console.error('Auto-sync error:', syncError);
+      console.error("[Strava] Initial sync failed:", syncError);
+      console.error("User ID:", userId, "Strava ID:", stravaId);
+
+
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { hasStravaData: false },
+      });
+
     }
 
     return res.redirect(`${process.env.CLIENT_URL}/account?strava=linked`);
@@ -482,12 +492,11 @@ async function syncStravaActivities(userId, accessToken) {
     let existingCount = 0;
 
     for (const activity of allStravaActivities) {
-      const existing = await prisma.activity.findUnique({
+      const existing = await prisma.activity.findFirst({
         where: {
-          externalId_source: {
+          userId,
             externalId: activity.id.toString(),
             source: "STRAVA",
-          },
         },
       });
 
