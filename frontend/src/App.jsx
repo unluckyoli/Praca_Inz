@@ -16,6 +16,7 @@ import TrainingPlanDetailPage from "./pages/TrainingPlanDetailPage";
 import ComparePage from "./pages/ComparePage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import GoalsPage from "./pages/GoalsPage";
 
 
 function App() {
@@ -65,6 +66,7 @@ function App() {
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/goals" element={<GoalsPage />} />
         </Routes>
       </FilterProvider>
     </Router>

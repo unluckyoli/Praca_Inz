@@ -211,7 +211,7 @@ const computeTrainingLoad = (activity) => {
 
 
   if (elevationGain > 0) {
-    load += elevationGain * 0.5; // 0.5 pkt za 1 m pod górę
+    load += elevationGain * 1.1; // 1.1 pkt za 1 m pod górę
   }
 
   return Math.round(load);

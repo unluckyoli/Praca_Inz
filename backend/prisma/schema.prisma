@@ -26,6 +26,7 @@ model User {
   userStats            UserStats?
   trainingPlans        TrainingPlan[]
   passwordResetTokens  PasswordResetToken[]
+  goals               Goal[]
 
 }
 
@@ -386,3 +387,44 @@ enum FocusType {
   MIXED
   RECOVERY
 }
+
+
+
+
+
+
+enum GoalType {
+  DISTANCE_KM
+  DURATION_MIN
+  ACTIVITIES_COUNT
+  ELEVATION_M
+}
+
+enum GoalPeriod {
+  WEEK
+  MONTH
+}
+
+model Goal {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        GoalType
+  period      GoalPeriod
+  target      Float
+
+  isActive    Boolean    @default(true)
+  windowStart DateTime
+  windowEnd   DateTime
+
+  isCompleted Boolean?
+  completedAt DateTime?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([userId, isActive])
+  @@index([userId, windowStart, windowEnd])
+}
+

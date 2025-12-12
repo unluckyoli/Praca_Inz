@@ -328,7 +328,7 @@ function ComparePage() {
           Obciążenie jest liczone na podstawie dystansu, tempa biegu i przewyższenia.{" "}
           To własny wskaźnik aplikacji: rośnie, gdy trening jest dłuższy, szybszy
           albo bardziej górzysty.
-          load = distance(km) * intensity * 10 + elevationGain * 0.1
+          load = distance(km) * intensity * 10 + elevationGain * 1.1
         </p>
 
         <div className="compare-legend">
