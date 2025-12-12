@@ -150,6 +150,73 @@ const computeClimbMetrics = (activity) => {
 };
 
 
+export const getFitnessMetrics = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const days = parseInt(req.query.days) || 90; // np. ostatnie 90 dni
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+
+    const metrics = await prisma.fitnessMetrics.findMany({
+      where: {
+        userId,
+        date: { gte: cutoffDate },
+      },
+      orderBy: { date: "asc" },
+      select: {
+        date: true,
+        ctl: true,
+        atl: true,
+        tsb: true,
+      },
+    });
+
+    res.json({ metrics });
+  } catch (error) {
+    console.error("Get fitness metrics error:", error);
+    res.status(500).json({ error: "Failed to fetch fitness metrics" });
+  }
+};
+
+
+
+
+const computeTrainingLoad = (activity) => {
+  if (activity.trainingLoad != null) return activity.trainingLoad;
+
+  const distance = activity.distance ?? 0;       // metry
+  const duration = activity.duration ?? 0;       // sekundy
+  const elevationGain = activity.elevationGain ?? 0; // metry
+
+  if (distance <= 0 && duration <= 0) return null;
+
+  const distanceKm = distance > 0 ? distance / 1000 : 0;
+  const durationMin = duration > 0 ? duration / 60 : 0;
+
+  let load = 0;
+
+  if (distanceKm > 0 && durationMin > 0) {
+    const pace = durationMin / distanceKm;
+    //(6:00 min/km = 1.0)
+    let intensity = 6 / pace;
+    if (!Number.isFinite(intensity) || intensity <= 0) intensity = 1;
+    intensity = Math.min(Math.max(intensity, 0.5), 2.0); // clamp 0.5–2
+
+    load = distanceKm * intensity * 10; // baza to: 10 pkt za każdy km
+  } else if (durationMin > 0) {
+    // jak nie ma dystansu to tyulko czas
+    load = durationMin * 5;
+  }
+
+
+  if (elevationGain > 0) {
+    load += elevationGain * 0.5; // 0.5 pkt za 1 m pod górę
+  }
+
+  return Math.round(load);
+};
+
 
 
 
@@ -538,6 +605,7 @@ export const compareActivities = async (req, res) => {
         maxSpeed: a.maxSpeed,
         elevationGain: a.elevationGain,
         calories: a.calories,
+        trainingLoad: computeTrainingLoad(a),
         paceDistance: a.paceDistance
           ? {
               km1: a.paceDistance.km1,
@@ -561,6 +629,10 @@ export const compareActivities = async (req, res) => {
       first: formatActivity(first),
       second: formatActivity(second),
     });
+
+    console.log("COMPARE first pacePerKm length:", first.pacePerKm?.length);
+    console.log("COMPARE second pacePerKm length:", second.pacePerKm?.length);
+
   } catch (error) {
     console.error("Compare activities error:", error);
     res.status(500).json({ error: "Failed to compare activities" });

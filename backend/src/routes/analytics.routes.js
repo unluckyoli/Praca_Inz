@@ -7,6 +7,7 @@ import {
   getIntensityDistribution,
   getProgressOverTime,
   compareActivities,
+  getFitnessMetrics,
 } from "../controllers/analytics.controller.js";
 
 const router = express.Router();
@@ -17,5 +18,6 @@ router.get("/monthly-trends", authenticate, getMonthlyTrends);
 router.get("/intensity-distribution", authenticate, getIntensityDistribution);
 router.get("/progress", authenticate, getProgressOverTime);
 router.get("/compare", authenticate, compareActivities);
+router.get("/fitness-metrics", authenticate, getFitnessMetrics);
 
 export default router;
