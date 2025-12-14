@@ -1036,16 +1036,30 @@ export const deleteTrainingPlan = async (req, res) => {
         const allWorkouts = plan.weeks.flatMap(week => week.workouts);
         const workoutsWithEvents = allWorkouts.filter(w => w.googleEventId);
 
-        console.log(`[Delete Plan] Found ${workoutsWithEvents.length} workouts with calendar events`);
+        const estimatedTime = Math.ceil(workoutsWithEvents.length * 0.15);
+        console.log(`[Delete Plan] Found ${workoutsWithEvents.length} workouts with calendar events (estimated ${estimatedTime}s)...`);
 
-        for (const workout of workoutsWithEvents) {
+        for (let i = 0; i < workoutsWithEvents.length; i++) {
+          const workout = workoutsWithEvents[i];
           try {
             await googleService.deleteCalendarEvent(userId, workout.googleEventId);
             deletedCount++;
-            console.log(`[Delete Plan] Deleted event for workout: ${workout.name}`);
+            
+            if ((i + 1) % 10 === 0 || i === workoutsWithEvents.length - 1) {
+              console.log(`[Delete Plan] Progress: ${i + 1}/${workoutsWithEvents.length} events deleted`);
+            }
+            
+            // Dodaj 150ms opóźnienia aby nie przekroczyć rate limitu (max 6-7 req/s)
+            await new Promise(resolve => setTimeout(resolve, 150));
           } catch (error) {
             failedCount++;
             console.error(`[Delete Plan] Failed to delete event for ${workout.name}:`, error.message);
+            
+            // Jeśli rate limit, poczekaj dłużej
+            if (error.message.includes('Rate Limit') || error.code === 429 || error.response?.status === 429) {
+              console.log(`[Delete Plan] Rate limit hit, waiting 2 seconds before continuing...`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
           }
         }
 
@@ -1364,6 +1378,8 @@ export const syncPlanToCalendar = async (req, res) => {
   try {
     const { id: planId } = req.params;
     const userId = getUserId(req);
+    
+    console.log(`[Sync Calendar] Starting sync for plan ${planId}...`);
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -1396,6 +1412,10 @@ export const syncPlanToCalendar = async (req, res) => {
     let eventsCreated = 0;
     let eventsUpdated = 0;
     const errors = [];
+    
+    const totalWorkouts = plan.weeks.flatMap(w => w.workouts).filter(w => w.workoutType !== 'REST').length;
+    const estimatedTime = Math.ceil(totalWorkouts * 0.15); // 150ms per workout
+    console.log(`[Sync Calendar] Syncing ${totalWorkouts} workouts (estimated ${estimatedTime}s)...`);
 
     let startDate;
     if (plan.targetRaceDate) {
@@ -1483,6 +1503,9 @@ export const syncPlanToCalendar = async (req, res) => {
             });
             eventsCreated++;
           }
+          
+          // Dodaj 150ms opóźnienia aby nie przekroczyć rate limitu Google Calendar API
+          await new Promise(resolve => setTimeout(resolve, 150));
         } catch (error) {
           console.error(`Error syncing workout ${workout.id} (${workout.name}):`, error);
           console.error('Error details:', {
@@ -1490,6 +1513,13 @@ export const syncPlanToCalendar = async (req, res) => {
             response: error.response?.data,
             status: error.response?.status,
           });
+          
+          // Jeśli rate limit, poczekaj dłużej i spróbuj ponownie
+          if (error.response?.status === 429 || error.message?.includes('Rate Limit')) {
+            console.log(`[Sync Calendar] Rate limit hit, waiting 2 seconds before continuing...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          
           errors.push({
             workoutId: workout.id,
             workoutName: workout.name,
