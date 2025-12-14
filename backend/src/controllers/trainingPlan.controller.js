@@ -1049,13 +1049,11 @@ export const deleteTrainingPlan = async (req, res) => {
               console.log(`[Delete Plan] Progress: ${i + 1}/${workoutsWithEvents.length} events deleted`);
             }
             
-            // Dodaj 150ms opóźnienia aby nie przekroczyć rate limitu (max 6-7 req/s)
             await new Promise(resolve => setTimeout(resolve, 150));
           } catch (error) {
             failedCount++;
             console.error(`[Delete Plan] Failed to delete event for ${workout.name}:`, error.message);
             
-            // Jeśli rate limit, poczekaj dłużej
             if (error.message.includes('Rate Limit') || error.code === 429 || error.response?.status === 429) {
               console.log(`[Delete Plan] Rate limit hit, waiting 2 seconds before continuing...`);
               await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1504,7 +1502,6 @@ export const syncPlanToCalendar = async (req, res) => {
             eventsCreated++;
           }
           
-          // Dodaj 150ms opóźnienia aby nie przekroczyć rate limitu Google Calendar API
           await new Promise(resolve => setTimeout(resolve, 150));
         } catch (error) {
           console.error(`Error syncing workout ${workout.id} (${workout.name}):`, error);
@@ -1514,7 +1511,6 @@ export const syncPlanToCalendar = async (req, res) => {
             status: error.response?.status,
           });
           
-          // Jeśli rate limit, poczekaj dłużej i spróbuj ponownie
           if (error.response?.status === 429 || error.message?.includes('Rate Limit')) {
             console.log(`[Sync Calendar] Rate limit hit, waiting 2 seconds before continuing...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
