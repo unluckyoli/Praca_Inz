@@ -10,8 +10,12 @@ import {
   ChevronDown,
   ChevronUp,
   CalendarPlus,
+  Edit2,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import Layout from "../components/Layout";
+import WorkoutModal from "../components/WorkoutModal";
 import { trainingPlanAPI, authAPI } from "../services/api";
 import "./TrainingPlanDetailPage.css";
 
@@ -24,6 +28,10 @@ function TrainingPlanDetailPage() {
   const [completingWorkout, setCompletingWorkout] = useState(null);
   const [syncingToCalendar, setSyncingToCalendar] = useState(false);
   const [calendarSyncMessage, setCalendarSyncMessage] = useState(null);
+  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState(null);
+  const [selectedWeek, setSelectedWeek] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -140,6 +148,60 @@ function TrainingPlanDetailPage() {
       setTimeout(() => setCalendarSyncMessage(null), 5000);
     } finally {
       setSyncingToCalendar(false);
+    }
+  };
+
+  const handleEditWorkout = (workout, weekNumber) => {
+    setEditingWorkout(workout);
+    setSelectedWeek(weekNumber);
+    setShowWorkoutModal(true);
+  };
+
+  const handleAddWorkout = (weekNumber, dayOfWeek) => {
+    setEditingWorkout(null);
+    setSelectedWeek(weekNumber);
+    setSelectedDay(dayOfWeek);
+    setShowWorkoutModal(true);
+  };
+
+  const handleDeleteWorkout = async (workoutId) => {
+    if (!confirm("Czy na pewno chcesz usunąć ten trening?")) {
+      return;
+    }
+
+    try {
+      await trainingPlanAPI.deleteWorkout(workoutId);
+      await fetchPlan();
+    } catch (error) {
+      console.error("Delete workout error:", error);
+      alert("Błąd podczas usuwania treningu");
+    }
+  };
+
+  const handleSaveWorkout = async (workoutData) => {
+    try {
+      console.log('Saving workout data:', workoutData);
+      
+      if (editingWorkout) {
+        const response = await trainingPlanAPI.updateWorkout(editingWorkout.id, workoutData);
+        console.log('Update response:', response.data);
+      } else {
+        const response = await trainingPlanAPI.addWorkout(planId, workoutData);
+        console.log('Add response:', response.data);
+      }
+      
+      setShowWorkoutModal(false);
+      setEditingWorkout(null);
+      setSelectedWeek(null);
+      setSelectedDay(null);
+      
+      // Poczekaj chwilę i odśwież plan
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await fetchPlan();
+    } catch (error) {
+      console.error("Save workout error:", error);
+      console.error("Error response:", error.response?.data);
+      alert("Błąd podczas zapisywania treningu: " + (error.response?.data?.error || error.message));
     }
   };
 
@@ -348,20 +410,34 @@ function TrainingPlanDetailPage() {
                             Aktywna regeneracja organizmu. Możesz wykonać lekki spacer lub stretching.
                           </p>
 
-                          <button
-                            className={`complete-btn ${workout.completed ? "completed" : ""}`}
-                            onClick={() =>
-                              !workout.completed && handleCompleteWorkout(workout.id)
-                            }
-                            disabled={workout.completed || completingWorkout === workout.id}
-                          >
-                            {workout.completed ? (
-                              <CheckCircle2 size={18} />
-                            ) : (
-                              <Circle size={18} />
+                          <div className="workout-actions">
+                            <button
+                              className={`complete-btn ${workout.completed ? "completed" : ""}`}
+                              onClick={() =>
+                                !workout.completed && handleCompleteWorkout(workout.id)
+                              }
+                              disabled={workout.completed || completingWorkout === workout.id}
+                            >
+                              {workout.completed ? (
+                                <CheckCircle2 size={18} />
+                              ) : (
+                                <Circle size={18} />
+                              )}
+                              {workout.completed ? "Ukończono" : "Oznacz jako ukończone"}
+                            </button>
+                            
+                            {!workout.completed && (
+                              <div className="edit-actions">
+                                <button
+                                  className="delete-btn"
+                                  onClick={() => handleDeleteWorkout(workout.id)}
+                                  title="Usuń dzień odpoczynku"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             )}
-                            {workout.completed ? "Ukończono" : "Oznacz jako ukończone"}
-                          </button>
+                          </div>
                         </>
                       ) : (
                         <>
@@ -439,7 +515,100 @@ function TrainingPlanDetailPage() {
                           parsedIntervals = null;
                         }
                         
-                        return parsedIntervals && (
+                        // Nowa struktura z blokami
+                        if (parsedIntervals?.blocks && Array.isArray(parsedIntervals.blocks)) {
+                          const blocks = parsedIntervals.blocks;
+                          const totalDuration = blocks.reduce((sum, b) => sum + (b.duration || 0), 0);
+                          
+                          const blockTypeLabels = {
+                            warmup: "Rozgrzewka",
+                            intervals: "Interwały",
+                            tempo: "Tempo",
+                            main: "Główna część",
+                            recovery: "Regeneracja",
+                            cooldown: "Wychłodzenie"
+                          };
+                          
+                          const blockColors = {
+                            warmup: "#10b981",
+                            intervals: "#ef4444",
+                            tempo: "#f59e0b",
+                            main: "#8b5cf6",
+                            recovery: "#3b82f6",
+                            cooldown: "#6366f1"
+                          };
+                          
+                          // Grupuj bloki interwałów i regeneracji
+                          const groupedBlocks = [];
+                          let i = 0;
+                          while (i < blocks.length) {
+                            const block = blocks[i];
+                            const nextBlock = blocks[i + 1];
+                            
+                            // Jeśli interwał + regeneracja, grupuj je
+                            if (block.type === 'intervals' && nextBlock && nextBlock.type === 'recovery') {
+                              groupedBlocks.push({
+                                type: 'interval-set',
+                                interval: block,
+                                recovery: nextBlock,
+                                duration: block.duration + nextBlock.duration
+                              });
+                              i += 2;
+                            } else {
+                              groupedBlocks.push(block);
+                              i++;
+                            }
+                          }
+                          
+                          return (
+                            <div className="workout-blocks-preview">
+                              <div className="blocks-timeline-preview">
+                                {blocks.map((block, idx) => {
+                                  const widthPercent = (block.duration / totalDuration) * 100;
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="block-preview"
+                                      style={{
+                                        width: `${widthPercent}%`,
+                                        backgroundColor: blockColors[block.type] || "#6b7280"
+                                      }}
+                                      title={`${blockTypeLabels[block.type] || block.type}: ${block.duration}min @ ${block.pace}/km`}
+                                    />
+                                  );
+                                })}
+                              </div>
+                              <div className="blocks-legend-preview">
+                                {groupedBlocks.map((item, idx) => {
+                                  if (item.type === 'interval-set') {
+                                    return (
+                                      <div key={idx} className="legend-item-preview interval-set">
+                                        <span className="legend-dot" style={{ backgroundColor: blockColors.intervals }} />
+                                        <span className="legend-text">
+                                          Interwał: {item.interval.duration}min @ {item.interval.pace}/km + regeneracja {item.recovery.duration}min
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div key={idx} className="legend-item-preview">
+                                      <span 
+                                        className="legend-dot" 
+                                        style={{ backgroundColor: blockColors[item.type] }}
+                                      />
+                                      <span className="legend-text">
+                                        {blockTypeLabels[item.type]}: {item.duration}min @ {item.pace}/km
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        // Stara struktura (backward compatibility)
+                        return parsedIntervals && (parsedIntervals.warmup || parsedIntervals.main || parsedIntervals.intervals) && (
                           <div className="intervals-section">
                             <div className="interval-phases">
                               {parsedIntervals.warmup && (
@@ -497,31 +666,77 @@ function TrainingPlanDetailPage() {
                         </div>
                       )}
 
-                      <button
-                        className={`complete-btn ${workout.completed ? "completed" : ""}`}
-                        onClick={() =>
-                          !workout.completed && handleCompleteWorkout(workout.id)
-                        }
-                        disabled={workout.completed || completingWorkout === workout.id}
-                      >
-                        {workout.completed ? (
-                          <CheckCircle2 size={18} />
-                        ) : (
-                          <Circle size={18} />
+                      <div className="workout-actions">
+                        <button
+                          className={`complete-btn ${workout.completed ? "completed" : ""}`}
+                          onClick={() =>
+                            !workout.completed && handleCompleteWorkout(workout.id)
+                          }
+                          disabled={workout.completed || completingWorkout === workout.id}
+                        >
+                          {workout.completed ? (
+                            <CheckCircle2 size={18} />
+                          ) : (
+                            <Circle size={18} />
+                          )}
+                          {workout.completed ? "Ukończono" : "Oznacz jako ukończone"}
+                        </button>
+                        
+                        {!workout.completed && (
+                          <div className="edit-actions">
+                            <button
+                              className="edit-btn"
+                              onClick={() => handleEditWorkout(workout, week.weekNumber)}
+                              title="Edytuj trening"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              className="delete-btn"
+                              onClick={() => handleDeleteWorkout(workout.id)}
+                              title="Usuń trening"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         )}
-                        {workout.completed ? "Ukończono" : "Oznacz jako ukończone"}
-                      </button>
+                      </div>
                       </>
                       )}
                     </div>
                     );
                   })}
+                  
+                  {expandedWeeks.includes(weekIndex) && (
+                    <button
+                      className="add-workout-btn"
+                      onClick={() => handleAddWorkout(week.weekNumber, 1)}
+                    >
+                      <Plus size={18} />
+                      Dodaj trening
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           ))}
         </div>
       </div>
+
+      {showWorkoutModal && (
+        <WorkoutModal
+          workout={editingWorkout}
+          weekNumber={selectedWeek}
+          dayOfWeek={selectedDay}
+          onSave={handleSaveWorkout}
+          onClose={() => {
+            setShowWorkoutModal(false);
+            setEditingWorkout(null);
+            setSelectedWeek(null);
+            setSelectedDay(null);
+          }}
+        />
+      )}
     </Layout>
   );
 }

@@ -378,8 +378,14 @@ REQUIRED JSON FORMAT:
       "targetDistance": 8,
       "targetDuration": 48,
       "targetPace": "6:00/km",
-      "intensity": "Easy",
-      "intervals": {"warmup":"1.5km @ 6:15/km","main":"5km @ 6:00/km","cooldown":"1.5km @ 6:15/km"}
+      "intensity": "EASY",
+      "intervals": {
+        "blocks": [
+          {"type":"warmup","duration":10,"pace":"6:15","distance":1.6},
+          {"type":"main","duration":30,"pace":"6:00","distance":5.0},
+          {"type":"cooldown","duration":8,"pace":"6:15","distance":1.3}
+        ]
+      }
     },{
       "dayOfWeek": 3,
       "workoutType": "INTERVALS",
@@ -388,43 +394,47 @@ REQUIRED JSON FORMAT:
       "targetDistance": 9,
       "targetDuration": 50,
       "targetPace": "4:30/km",
-      "intensity": "Hard",
-      "intervals": {"warmup":"2km @ 6:00/km","main":"8x400m @ 4:20/km w/ 200m jog","cooldown":"1.5km @ 6:00/km"}
-    },{
-      "dayOfWeek": 6,
-      "workoutType": "LONG_RUN",
-      "name": "Long 16km",
-      "description": "Endurance building",
-      "targetDistance": 16,
-      "targetDuration": 96,
-      "targetPace": "6:00/km",
-      "intensity": "Easy",
-      "intervals": {"warmup":"2km @ 6:15/km","main":"12km @ 6:00/km","cooldown":"2km @ 6:15/km"}
+      "intensity": "HARD",
+      "intervals": {
+        "blocks": [
+          {"type":"warmup","duration":12,"pace":"6:00","distance":2.0},
+          {"type":"intervals","duration":3,"pace":"4:20","distance":0.7},
+          {"type":"recovery","duration":1,"pace":"6:30","distance":0.15},
+          {"type":"intervals","duration":3,"pace":"4:20","distance":0.7},
+          {"type":"recovery","duration":1,"pace":"6:30","distance":0.15},
+          {"type":"cooldown","duration":9,"pace":"6:00","distance":1.5}
+        ]
+      }
     }]
   }]
 }
 
 WORKOUT TYPES: EASY_RUN, LONG_RUN, TEMPO_RUN, INTERVALS, REST
-INTENSITY LEVELS: Easy, Moderate, Hard
+INTENSITY LEVELS: EASY, MODERATE, HARD, VERY_HARD
+BLOCK TYPES: warmup, intervals, tempo, main, recovery, cooldown
 
 CRITICAL RULES:
 - Week numbers: ${startWeekNumber} to ${startWeekNumber + weeksCount - 1}
 - Each week must have DIFFERENT distance and intensity
 - All descriptions max 40 characters
-- EVERY workout MUST have intervals structure with: warmup, main, cooldown
-- ⚠️ MANDATORY: Include pace in ALL parts - EXAMPLES:
-  ✓ CORRECT: "2km @ 6:00/km", "8x400m @ 4:20/km w/ 200m jog", "12km @ 5:30/km"
-  ✗ WRONG: "2km easy", "12km steady", "2km" (missing pace!)
-- For INTERVALS: "8x400m @ 4:20/km w/ 200m jog" or "5x1000m @ 4:50/km w/ 400m rec"
-- For continuous runs: "10km @ 5:30/km" or "8km @ 5:25/km (HM pace)"
-- Warmup/cooldown: add "@ X:XX/km" (10-15sec/km slower than main)
-- REST workouts: distance=0, duration=0, pace=null, intervals=null (no structure)
+- EVERY workout MUST have intervals.blocks structure (array of block objects)
+- Each block MUST have: type, duration (minutes), pace (format "X:XX"), distance (km)
+- Block types: warmup, main, cooldown for easy runs; warmup, intervals, recovery, cooldown for interval training
+- For interval workouts: alternate intervals and recovery blocks (e.g., interval → recovery → interval → recovery)
+- Duration is in MINUTES (not seconds!)
+- Pace format: "4:30" or "6:00" (NOT "4:30/km")
+- Distance must match: distance = duration / paceInMinutes (e.g., 10min @ 5:00 pace = 2.0km)
+- REST workouts: distance=0, duration=0, pace=null, intervals=null (no blocks)
 - Generate ${sessionsPerWeek} workouts per week
 - Use training days: ${trainingDaysStr}
-- IMPORTANT: Use ONLY the paces from USER'S CURRENT PERFORMANCE DATA above
-- Calculate targetDuration based on targetDistance and targetPace
+- Use ONLY the paces from USER'S CURRENT PERFORMANCE DATA above
+- Calculate targetDuration as sum of all block durations
+- Calculate targetDistance as sum of all block distances
 
-⚠️ REMEMBER: NO part should say just "easy" or "steady" - ALWAYS add "@ X:XX/km"
+EXAMPLE BLOCK STRUCTURES:
+Easy run: [warmup 10min, main 30min, cooldown 5min]
+Intervals: [warmup 15min, intervals 4min, recovery 2min, intervals 4min, recovery 2min, intervals 4min, cooldown 10min]
+Tempo: [warmup 15min, tempo 20min, cooldown 10min]
 
 OUTPUT ONLY VALID JSON!
 `;

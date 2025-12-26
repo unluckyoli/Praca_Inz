@@ -1546,3 +1546,184 @@ export const syncPlanToCalendar = async (req, res) => {
     res.status(500).json({ error: 'Failed to sync training plan to calendar' });
   }
 };
+// Dodaj na końcu pliku trainingPlan.controller.js
+
+// Edytuj trening w planie
+export const updateWorkout = async (req, res) => {
+  try {
+    const { workoutId } = req.params;
+    const userId = getUserId(req);
+    const {
+      name,
+      description,
+      targetDistance,
+      targetDuration,
+      targetPace,
+      intensity,
+      intervals,
+      dayOfWeek,
+      workoutType,
+    } = req.body;
+
+    // Sprawdź czy workout należy do użytkownika
+    const workout = await prisma.planWorkout.findUnique({
+      where: { id: workoutId },
+      include: {
+        planWeek: {
+          include: {
+            trainingPlan: true,
+          },
+        },
+      },
+    });
+
+    if (!workout) {
+      return res.status(404).json({ error: 'Workout not found' });
+    }
+
+    if (workout.planWeek.trainingPlan.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Aktualizuj workout
+    const updatedWorkout = await prisma.planWorkout.update({
+      where: { id: workoutId },
+      data: {
+        name,
+        description,
+        targetDistance,
+        targetDuration,
+        targetPace,
+        intensity,
+        intervals,
+        dayOfWeek,
+        workoutType,
+      },
+    });
+
+    res.json(updatedWorkout);
+  } catch (error) {
+    console.error('Error updating workout:', error);
+    res.status(500).json({ error: 'Failed to update workout' });
+  }
+};
+
+// Dodaj nowy trening do planu
+export const addWorkoutToPlan = async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const userId = getUserId(req);
+    const {
+      weekNumber,
+      dayOfWeek,
+      name,
+      description,
+      targetDistance,
+      targetDuration,
+      targetPace,
+      intensity,
+      intervals,
+      workoutType,
+    } = req.body;
+
+    // Sprawdź czy plan należy do użytkownika
+    const plan = await prisma.trainingPlan.findUnique({
+      where: { id: planId },
+    });
+
+    if (!plan) {
+      return res.status(404).json({ error: 'Training plan not found' });
+    }
+
+    if (plan.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Znajdź lub utwórz tydzień
+    let planWeek = await prisma.planWeek.findFirst({
+      where: {
+        trainingPlanId: planId,
+        weekNumber,
+      },
+    });
+
+    if (!planWeek) {
+      planWeek = await prisma.planWeek.create({
+        data: {
+          trainingPlanId: planId,
+          weekNumber,
+          startDate: new Date(plan.startDate.getTime() + (weekNumber - 1) * 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+
+    // Utwórz workout
+    const workout = await prisma.planWorkout.create({
+      data: {
+        planWeekId: planWeek.id,
+        dayOfWeek,
+        name,
+        description,
+        targetDistance,
+        targetDuration,
+        targetPace,
+        intensity,
+        intervals,
+        workoutType: workoutType || 'EASY_RUN',
+      },
+    });
+
+    res.status(201).json(workout);
+  } catch (error) {
+    console.error('Error adding workout to plan:', error);
+    res.status(500).json({ error: 'Failed to add workout to plan' });
+  }
+};
+
+// Usuń trening z planu
+export const deleteWorkout = async (req, res) => {
+  try {
+    const { workoutId } = req.params;
+    const userId = getUserId(req);
+
+    // Sprawdź czy workout należy do użytkownika
+    const workout = await prisma.planWorkout.findUnique({
+      where: { id: workoutId },
+      include: {
+        planWeek: {
+          include: {
+            trainingPlan: true,
+          },
+        },
+      },
+    });
+
+    if (!workout) {
+      return res.status(404).json({ error: 'Workout not found' });
+    }
+
+    if (workout.planWeek.trainingPlan.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Jeśli workout ma Google Calendar event, usuń go
+    if (workout.googleEventId) {
+      try {
+        await googleService.deleteCalendarEvent(userId, workout.googleEventId);
+      } catch (error) {
+        console.error('Error deleting calendar event:', error);
+        // Kontynuuj nawet jeśli usuniecie z kalendarza się nie powiodło
+      }
+    }
+
+    // Usuń workout
+    await prisma.planWorkout.delete({
+      where: { id: workoutId },
+    });
+
+    res.json({ message: 'Workout deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting workout:', error);
+    res.status(500).json({ error: 'Failed to delete workout' });
+  }
+};
