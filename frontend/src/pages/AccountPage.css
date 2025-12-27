@@ -4,6 +4,89 @@
   padding: 2rem;
 }
 
+.view-mode-toggle {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.5rem;
+  background: #f9fafb;
+  padding: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  width: fit-content;
+}
+
+.view-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #6b7280;
+}
+
+.view-mode-btn:hover {
+  background: #ffffff;
+  color: #374151;
+}
+
+.view-mode-btn.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.view-mode-btn svg {
+  flex-shrink: 0;
+}
+
+.week-header-simple {
+  padding: 1.25rem 1.5rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
+}
+
+.week-header-simple h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #111827;
+}
+
+.week-header-simple .week-goal {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.week-stats-inline {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.week-stats-inline span {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: #ffffff;
+  color: #6b7280;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
 .success-message {
   display: flex;
   align-items: flex-start;
@@ -351,21 +434,25 @@
   flex-direction: column;
   align-items: center;
   padding: 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
-  color: white;
+  color: #111827;
 }
 
 .stat-box:nth-child(2) {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
 }
 
 .stat-box:nth-child(3) {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
 }
 
 .stat-box:nth-child(4) {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
 }
 
 .stat-value {

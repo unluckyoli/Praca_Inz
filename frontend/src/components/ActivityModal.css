@@ -77,8 +77,8 @@
 }
 
 .stat-card-primary:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  border-color: #9ca3af;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-card-value-row {
@@ -142,7 +142,7 @@
 
 .info-value.activity-type-badge {
   display: inline-block;
-  background: #667eea;
+  background: #111827;
   color: white;
   padding: 0.5rem 1rem;
   border-radius: 8px;
@@ -160,7 +160,7 @@
 }
 
 .fetch-details-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #111827;
   color: white;
   border: none;
   padding: 1rem 2rem;
@@ -170,13 +170,13 @@
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .fetch-details-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  background: #1f2937;
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .fetch-details-btn:disabled {
@@ -214,8 +214,8 @@
 }
 
 .secondary-stat:hover {
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+  border-color: #9ca3af;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .secondary-label {

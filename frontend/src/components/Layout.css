@@ -22,10 +22,8 @@
 
 .nav-header h2 {
   font-size: 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #111827;
+  font-weight: 700;
 }
 
 .nav-items {
@@ -49,13 +47,13 @@
 
 .nav-item:hover {
   background: #f9fafb;
-  color: #667eea;
+  color: #111827;
 }
 
 .nav-item.active {
   background: #f0f4ff;
-  color: #667eea;
-  border-left-color: #667eea;
+  color: #111827;
+  border-left-color: #6b7280;
   font-weight: 600;
 }
 
@@ -94,7 +92,7 @@
   
   .nav-item.active {
     border-left-color: transparent;
-    border-bottom-color: #667eea;
+    border-bottom-color: #6b7280;
   }
   
   .nav-item span {

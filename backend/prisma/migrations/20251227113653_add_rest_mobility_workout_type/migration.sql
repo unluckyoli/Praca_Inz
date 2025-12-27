@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "WorkoutType" ADD VALUE 'REST_MOBILITY';

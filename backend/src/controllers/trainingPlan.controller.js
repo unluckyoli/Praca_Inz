@@ -1546,9 +1546,7 @@ export const syncPlanToCalendar = async (req, res) => {
     res.status(500).json({ error: 'Failed to sync training plan to calendar' });
   }
 };
-// Dodaj na końcu pliku trainingPlan.controller.js
 
-// Edytuj trening w planie
 export const updateWorkout = async (req, res) => {
   try {
     const { workoutId } = req.params;
@@ -1563,9 +1561,9 @@ export const updateWorkout = async (req, res) => {
       intervals,
       dayOfWeek,
       workoutType,
+      order,
     } = req.body;
 
-    // Sprawdź czy workout należy do użytkownika
     const workout = await prisma.planWorkout.findUnique({
       where: { id: workoutId },
       include: {
@@ -1598,6 +1596,23 @@ export const updateWorkout = async (req, res) => {
         intervals,
         dayOfWeek,
         workoutType,
+        order,
+      },
+    });
+
+    // Przelicz sumy dla tygodnia
+    const weekWorkouts = await prisma.planWorkout.findMany({
+      where: { planWeekId: workout.planWeekId },
+    });
+
+    const weekTotalDistance = weekWorkouts.reduce((sum, w) => sum + (w.targetDistance || 0), 0);
+    const weekTotalDuration = weekWorkouts.reduce((sum, w) => sum + (w.targetDuration || 0), 0);
+
+    await prisma.planWeek.update({
+      where: { id: workout.planWeekId },
+      data: {
+        totalDistance: weekTotalDistance,
+        totalDuration: weekTotalDuration,
       },
     });
 
@@ -1673,6 +1688,22 @@ export const addWorkoutToPlan = async (req, res) => {
       },
     });
 
+    // Przelicz sumy dla tygodnia
+    const weekWorkouts = await prisma.planWorkout.findMany({
+      where: { planWeekId: planWeek.id },
+    });
+
+    const weekTotalDistance = weekWorkouts.reduce((sum, w) => sum + (w.targetDistance || 0), 0);
+    const weekTotalDuration = weekWorkouts.reduce((sum, w) => sum + (w.targetDuration || 0), 0);
+
+    await prisma.planWeek.update({
+      where: { id: planWeek.id },
+      data: {
+        totalDistance: weekTotalDistance,
+        totalDuration: weekTotalDuration,
+      },
+    });
+
     res.status(201).json(workout);
   } catch (error) {
     console.error('Error adding workout to plan:', error);
@@ -1680,13 +1711,11 @@ export const addWorkoutToPlan = async (req, res) => {
   }
 };
 
-// Usuń trening z planu
 export const deleteWorkout = async (req, res) => {
   try {
     const { workoutId } = req.params;
     const userId = getUserId(req);
 
-    // Sprawdź czy workout należy do użytkownika
     const workout = await prisma.planWorkout.findUnique({
       where: { id: workoutId },
       include: {
@@ -1706,19 +1735,33 @@ export const deleteWorkout = async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    // Jeśli workout ma Google Calendar event, usuń go
     if (workout.googleEventId) {
       try {
         await googleService.deleteCalendarEvent(userId, workout.googleEventId);
       } catch (error) {
         console.error('Error deleting calendar event:', error);
-        // Kontynuuj nawet jeśli usuniecie z kalendarza się nie powiodło
       }
     }
 
-    // Usuń workout
+    const planWeekId = workout.planWeekId;
+    
     await prisma.planWorkout.delete({
       where: { id: workoutId },
+    });
+
+    const weekWorkouts = await prisma.planWorkout.findMany({
+      where: { planWeekId },
+    });
+
+    const weekTotalDistance = weekWorkouts.reduce((sum, w) => sum + (w.targetDistance || 0), 0);
+    const weekTotalDuration = weekWorkouts.reduce((sum, w) => sum + (w.targetDuration || 0), 0);
+
+    await prisma.planWeek.update({
+      where: { id: planWeekId },
+      data: {
+        totalDistance: weekTotalDistance,
+        totalDuration: weekTotalDuration,
+      },
     });
 
     res.json({ message: 'Workout deleted successfully' });

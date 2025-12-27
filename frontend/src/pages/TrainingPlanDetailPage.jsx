@@ -13,9 +13,12 @@ import {
   Edit2,
   Trash2,
   Plus,
+  Grid3x3,
+  List,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import WorkoutModal from "../components/WorkoutModal";
+import WeekView from "../components/WeekView";
 import { trainingPlanAPI, authAPI } from "../services/api";
 import "./TrainingPlanDetailPage.css";
 
@@ -32,6 +35,7 @@ function TrainingPlanDetailPage() {
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [selectedWeek, setSelectedWeek] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [viewMode, setViewMode] = useState("week"); // "week" or "list"
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -157,13 +161,6 @@ function TrainingPlanDetailPage() {
     setShowWorkoutModal(true);
   };
 
-  const handleAddWorkout = (weekNumber, dayOfWeek) => {
-    setEditingWorkout(null);
-    setSelectedWeek(weekNumber);
-    setSelectedDay(dayOfWeek);
-    setShowWorkoutModal(true);
-  };
-
   const handleDeleteWorkout = async (workoutId) => {
     if (!confirm("Czy na pewno chcesz usunąć ten trening?")) {
       return;
@@ -195,7 +192,6 @@ function TrainingPlanDetailPage() {
       setSelectedWeek(null);
       setSelectedDay(null);
       
-      // Poczekaj chwilę i odśwież plan
       await new Promise(resolve => setTimeout(resolve, 500));
       await fetchPlan();
     } catch (error) {
@@ -203,6 +199,86 @@ function TrainingPlanDetailPage() {
       console.error("Error response:", error.response?.data);
       alert("Błąd podczas zapisywania treningu: " + (error.response?.data?.error || error.message));
     }
+  };
+
+  const handleWorkoutMove = async (workoutId, newDayOfWeek) => {
+    try {
+      const workout = plan.weeks
+        .flatMap(w => w.workouts)
+        .find(w => w.id === workoutId);
+      
+      if (!workout) {
+        throw new Error("Workout not found");
+      }
+
+      setPlan(prevPlan => ({
+        ...prevPlan,
+        weeks: prevPlan.weeks.map(week => ({
+          ...week,
+          workouts: week.workouts.map(w =>
+            w.id === workoutId ? { ...w, dayOfWeek: newDayOfWeek } : w
+          )
+        }))
+      }));
+
+      await trainingPlanAPI.updateWorkout(workoutId, {
+        ...workout,
+        dayOfWeek: newDayOfWeek,
+      });
+
+      await fetchPlan();
+    } catch (error) {
+      console.error("Move workout error:", error);
+      alert("Błąd podczas przenoszenia treningu");
+      await fetchPlan();
+    }
+  };
+
+  const handleWorkoutReorder = async (workoutId, newOrder) => {
+    try {
+      const workout = plan.weeks
+        .flatMap(w => w.workouts)
+        .find(w => w.id === workoutId);
+      
+      if (!workout) {
+        throw new Error("Workout not found");
+      }
+
+      const sameDayWorkouts = plan.weeks
+        .flatMap(w => w.workouts)
+        .filter(w => w.dayOfWeek === workout.dayOfWeek && w.planWeekId === workout.planWeekId)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      const reorderedWorkouts = [...sameDayWorkouts];
+      const oldIndex = reorderedWorkouts.findIndex(w => w.id === workoutId);
+      const [movedWorkout] = reorderedWorkouts.splice(oldIndex, 1);
+      reorderedWorkouts.splice(newOrder, 0, movedWorkout);
+
+      for (let i = 0; i < reorderedWorkouts.length; i++) {
+        await trainingPlanAPI.updateWorkout(reorderedWorkouts[i].id, {
+          ...reorderedWorkouts[i],
+          order: i,
+        });
+      }
+
+      await fetchPlan();
+    } catch (error) {
+      console.error("Reorder workout error:", error);
+      alert("Błąd podczas zmiany kolejności");
+      await fetchPlan();
+    }
+  };
+
+  const handleAddWorkout = (weekNumber, dayOfWeek) => {
+    setSelectedWeek(weekNumber);
+    setSelectedDay(dayOfWeek);
+    setEditingWorkout(null);
+    setShowWorkoutModal(true);
+  };
+
+  const handleWorkoutClick = (workout) => {
+    setEditingWorkout(workout);
+    setShowWorkoutModal(true);
   };
 
   const formatDate = (dateString) => {
@@ -352,9 +428,49 @@ function TrainingPlanDetailPage() {
           </div>
         </div>
 
+        <div className="view-mode-toggle">
+          <button
+            className={`view-mode-btn ${viewMode === "week" ? "active" : ""}`}
+            onClick={() => setViewMode("week")}
+            title="Widok tygodniowy"
+          >
+            <Grid3x3 size={18} />
+            <span>Tydzień</span>
+          </button>
+          <button
+            className={`view-mode-btn ${viewMode === "list" ? "active" : ""}`}
+            onClick={() => setViewMode("list")}
+            title="Widok listy"
+          >
+            <List size={18} />
+            <span>Lista</span>
+          </button>
+        </div>
+
         <div className="weeks-container">
           {plan.weeks?.map((week, weekIndex) => (
             <div key={week.id} className="week-card">
+              {viewMode === "week" ? (
+                <>
+                  <div className="week-header-simple">
+                    <h3>Tydzień {week.weekNumber}</h3>
+                    {week.weekGoal && <p className="week-goal">{week.weekGoal}</p>}
+                    <div className="week-stats-inline">
+                      <span>{week.totalDistance?.toFixed(1) || 0} km</span>
+                      <span>{Math.floor((week.totalDuration || 0) / 60)}h {(week.totalDuration || 0) % 60}min</span>
+                    </div>
+                  </div>
+                  <WeekView
+                    week={week}
+                    onWorkoutClick={handleWorkoutClick}
+                    onWorkoutMove={handleWorkoutMove}
+                    onWorkoutReorder={handleWorkoutReorder}
+                    onAddWorkout={(dayOfWeek) => handleAddWorkout(week.weekNumber, dayOfWeek)}
+                    onDeleteWorkout={handleDeleteWorkout}
+                  />
+                </>
+              ) : (
+                <>
               <div
                 className="week-header"
                 onClick={() => toggleWeek(weekIndex)}
@@ -386,12 +502,25 @@ function TrainingPlanDetailPage() {
               {expandedWeeks.includes(weekIndex) && (
                 <div className="workouts-list">
                   {week.workouts?.map((workout) => {
-                    const isRestDay = workout.workoutType === 'REST';
+                    const isRestDay = workout.workoutType === 'REST' || workout.workoutType === 'REST_MOBILITY';
                     
                     return (
                     <div
                       key={workout.id}
                       className={`workout-card ${workout.completed ? "completed" : ""} ${isRestDay ? "rest-day" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        if (e.target.closest('button')) return;
+                        handleWorkoutClick(workout);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.target.closest('button')) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleWorkoutClick(workout);
+                        }
+                      }}
                     >
                       {isRestDay ? (
                         <>
@@ -538,22 +667,54 @@ function TrainingPlanDetailPage() {
                             cooldown: "#6366f1"
                           };
                           
-                          // Grupuj bloki interwałów i regeneracji
                           const groupedBlocks = [];
                           let i = 0;
                           while (i < blocks.length) {
                             const block = blocks[i];
                             const nextBlock = blocks[i + 1];
-                            
-                            // Jeśli interwał + regeneracja, grupuj je
-                            if (block.type === 'intervals' && nextBlock && nextBlock.type === 'recovery') {
+
+                            const isIntervalPair =
+                              block?.type === 'intervals' &&
+                              nextBlock?.type === 'recovery';
+
+                            if (isIntervalPair) {
+                              const repetitions = Number.isFinite(block.repetitions)
+                                ? Math.max(1, block.repetitions)
+                                : 1;
+
+                              if (repetitions > 1) {
+                                groupedBlocks.push({
+                                  type: 'interval-set',
+                                  interval: block,
+                                  recovery: nextBlock,
+                                  count: repetitions,
+                                });
+                                i += 2;
+                                continue;
+                              }
+
+                             const signature = `${block.duration}|${block.pace}|${nextBlock.duration}|${nextBlock.pace || ''}`;
+                              let count = 1;
+                              let j = i + 2;
+
+                              while (j + 1 < blocks.length) {
+                                const b = blocks[j];
+                                const r = blocks[j + 1];
+                                if (b?.type !== 'intervals' || r?.type !== 'recovery') break;
+                                const sig2 = `${b.duration}|${b.pace}|${r.duration}|${r.pace || ''}`;
+                                if (sig2 !== signature) break;
+                                count += 1;
+                                j += 2;
+                              }
+
                               groupedBlocks.push({
                                 type: 'interval-set',
                                 interval: block,
                                 recovery: nextBlock,
-                                duration: block.duration + nextBlock.duration
+                                count,
                               });
-                              i += 2;
+
+                              i += count * 2;
                             } else {
                               groupedBlocks.push(block);
                               i++;
@@ -564,11 +725,18 @@ function TrainingPlanDetailPage() {
                             <div className="workout-blocks-preview">
                               <div className="blocks-timeline-preview">
                                 {blocks.map((block, idx) => {
+                                  const prevBlock = blocks[idx - 1];
+                                  const nextBlock = blocks[idx + 1];
+                                  const isInterval = block.type === 'intervals';
+                                  const isRecovery = block.type === 'recovery';
+                                  const isIntervalWithRecovery = isInterval && nextBlock?.type === 'recovery';
+                                  const isRecoveryAfterInterval = isRecovery && prevBlock?.type === 'intervals';
+
                                   const widthPercent = (block.duration / totalDuration) * 100;
                                   return (
                                     <div
                                       key={idx}
-                                      className="block-preview"
+                                      className={`block-preview ${isIntervalWithRecovery ? 'paired-interval' : ''} ${isRecoveryAfterInterval ? 'paired-recovery' : ''}`}
                                       style={{
                                         width: `${widthPercent}%`,
                                         backgroundColor: blockColors[block.type] || "#6b7280"
@@ -581,11 +749,14 @@ function TrainingPlanDetailPage() {
                               <div className="blocks-legend-preview">
                                 {groupedBlocks.map((item, idx) => {
                                   if (item.type === 'interval-set') {
+                                    const count = item.count || 1;
                                     return (
                                       <div key={idx} className="legend-item-preview interval-set">
                                         <span className="legend-dot" style={{ backgroundColor: blockColors.intervals }} />
                                         <span className="legend-text">
-                                          Interwał: {item.interval.duration}min @ {item.interval.pace}/km + regeneracja {item.recovery.duration}min
+                                          {count > 1
+                                            ? `${count}x (${item.interval.duration}min @ ${item.interval.pace}/km + regeneracja ${item.recovery.duration}min)`
+                                            : `Interwał: ${item.interval.duration}min @ ${item.interval.pace}/km + regeneracja ${item.recovery.duration}min`}
                                         </span>
                                       </div>
                                     );
@@ -607,7 +778,6 @@ function TrainingPlanDetailPage() {
                           );
                         }
                         
-                        // Stara struktura (backward compatibility)
                         return parsedIntervals && (parsedIntervals.warmup || parsedIntervals.main || parsedIntervals.intervals) && (
                           <div className="intervals-section">
                             <div className="interval-phases">
@@ -717,6 +887,8 @@ function TrainingPlanDetailPage() {
                     </button>
                   )}
                 </div>
+              )}
+                </>
               )}
             </div>
           ))}

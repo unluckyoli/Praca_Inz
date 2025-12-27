@@ -40,12 +40,12 @@
 }
 
 .sync-btn {
-  background: #667eea;
+  background: #111827;
   color: white;
 }
 
 .sync-btn:hover {
-  background: #5568d3;
+  background: #1f2937;
 }
 
 .sync-btn:disabled {
@@ -54,12 +54,12 @@
 }
 
 .sync-btn.secondary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #111827;
 }
 
 .sync-btn.secondary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
 }
 
 .logout-btn {
@@ -149,8 +149,8 @@
 }
 
 .activity-item:hover {
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+  border-color: #9ca3af;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transform: translateX(4px);
 }
 
@@ -161,7 +161,7 @@
 
 .activity-arrow {
   font-size: 1.5rem;
-  color: #667eea;
+  color: #6b7280;
   opacity: 0;
   transform: translateX(-10px);
   transition: all 0.2s ease;
@@ -256,7 +256,7 @@
 
 .pagination-btn {
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #111827;
   color: white;
   border: none;
   border-radius: 6px;
@@ -267,7 +267,7 @@
 
 .pagination-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .pagination-btn:disabled {

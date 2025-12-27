@@ -53,13 +53,13 @@
 }
 
 .filter-group select:hover {
-  border-color: #667eea;
+  border-color: #9ca3af;
 }
 
 .filter-group select:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
 }
 
 .highlights-section {
@@ -88,7 +88,7 @@
 }
 
 .highlight-icon {
-  color: #667eea;
+  color: #6b7280;
   margin-bottom: 1rem;
   display: flex;
   justify-content: center;
@@ -168,7 +168,7 @@ td {
 
 .type-cell {
   font-weight: 600;
-  color: #667eea;
+  color: #6b7280;
 }
 
 .averages-grid {
@@ -186,7 +186,7 @@ td {
 
 .average-card h4 {
   font-size: 1.2rem;
-  color: #667eea;
+  color: #111827;
   margin-bottom: 1rem;
   font-weight: 600;
 }
@@ -253,7 +253,7 @@ td {
 
 .activity-row:hover {
   background: #f9fafb;
-  border-color: #667eea;
+  border-color: #9ca3af;
   transform: translateX(4px);
 }
 

@@ -25,7 +25,7 @@
 }
 
 .filters-title svg {
-  color: #667eea;
+  color: #6b7280;
 }
 
 .reset-filters {
@@ -85,13 +85,13 @@
 }
 
 .filter-select:hover {
-  border-color: #667eea;
+  border-color: #9ca3af;
 }
 
 .filter-select:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
 }
 
 .active-filters-summary {
@@ -110,7 +110,7 @@
   display: inline-flex;
   align-items: center;
   padding: 0.25rem 0.75rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #111827;
   color: white;
   border-radius: 20px;
   font-size: 0.75rem;
@@ -159,13 +159,13 @@
 }
 
 .filter-date-input:hover {
-  border-color: #667eea;
+  border-color: #9ca3af;
 }
 
 .filter-date-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #9ca3af;
+  box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1);
 }
 
 /* Przywróć natywną ikonę kalendarza */

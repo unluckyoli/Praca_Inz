@@ -14,7 +14,7 @@
 }
 
 .empty-state svg {
-  color: #667eea;
+  color: #6b7280;
   margin-bottom: 1.5rem;
 }
 
@@ -72,16 +72,17 @@
 }
 
 .view-toggle button.active {
-  background: #667eea;
+  background: #111827;
   color: white;
 }
 
 .user-profile-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f9fafb;
   padding: 2rem;
   border-radius: 12px;
   margin-bottom: 2rem;
-  color: white;
+  color: #111827;
+  border: 1px solid #e5e7eb;
 }
 
 .user-profile-section h2 {
@@ -150,7 +151,7 @@
 .plan-card.selected {
   transform: translateY(-4px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  border-color: #667eea;
+  border-color: #9ca3af;
 }
 
 .plan-card h3 {
@@ -304,7 +305,7 @@
 }
 
 .info-item svg {
-  color: #667eea;
+  color: #6b7280;
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -329,8 +330,16 @@
 
 .week-card {
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.week-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .week-header {

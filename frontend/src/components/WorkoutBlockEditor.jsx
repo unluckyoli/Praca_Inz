@@ -1,31 +1,33 @@
-import { useState, useEffect } from "react";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import "./WorkoutBlockEditor.css";
 
-function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
+function WorkoutBlockEditor({ initialBlocks = [], onChange, readOnly = false }) {
   const [blocks, setBlocks] = useState([]);
   const [selectedBlock, setSelectedBlock] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedBlock, setDraggedBlock] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [resizingBlock, setResizingBlock] = useState(null);
-  const [resizeEdge, setResizeEdge] = useState(null); // 'left' or 'right'
+  const [resizeEdge, setResizeEdge] = useState(null); 
   const [resizeStartX, setResizeStartX] = useState(0);
   const [resizeStartDuration, setResizeStartDuration] = useState(0);
+  const [cornerResizingBlock, setCornerResizingBlock] = useState(null);
   const [initialized, setInitialized] = useState(false);
   const [showBlockTypeMenu, setShowBlockTypeMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
 
-  // Inicjalizuj bloki z initialBlocks lub domyślnymi blokami - TYLKO RAZ
+  const timelineRef = useRef(null);
+  const draggedBlockRef = useRef(null);
+
   useEffect(() => {
-    if (initialized) return; // Już zainicjalizowane, nie rób nic
+    if (initialized) return; 
     
     if (initialBlocks.length > 0) {
       console.log('Loading blocks from initialBlocks:', initialBlocks);
       setBlocks(initialBlocks);
       setInitialized(true);
     } else {
-      // Domyślna struktura tylko jeśli nie ma bloków i nie przekazano initialBlocks
       console.log('Creating default blocks');
       setBlocks([
         { id: Date.now() + 1, type: "warmup", duration: 10, pace: "6:00", distance: 1.7 },
@@ -34,16 +36,13 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
       ]);
       setInitialized(true);
     }
-  }, [initialBlocks, initialized]); // Obserwuj initialBlocks, ale użyj flagi initialized
+  }, [initialBlocks, initialized]); 
 
   useEffect(() => {
-    // Wywołaj onChange gdy bloki się zmienią (ale nie przy pierwszej inicjalizacji)
     if (blocks.length > 0 && onChange) {
       onChange(blocks);
     }
-  }, [blocks]); // Usunięto onChange z dependencies aby uniknąć pętli
-
-  // Zamknij menu po kliknięciu poza nim
+  }, [blocks]); 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (showBlockTypeMenu && !e.target.closest('.add-block-container')) {
@@ -64,16 +63,15 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   ];
 
   const addBlockOfType = (blockType) => {
+    if (readOnly) return;
     setShowBlockTypeMenu(false);
     
-    // Funkcja do parsowania tempa
     const parsePace = (paceStr) => {
       const match = paceStr.match(/(\d+):(\d+)/);
       if (!match) return 5.0;
       return parseInt(match[1]) + parseInt(match[2]) / 60;
     };
     
-    // Domyślne wartości dla różnych typów bloków
     const blockDefaults = {
       warmup: { duration: 10, pace: "6:00" },
       intervals: { duration: 5, pace: "4:30" },
@@ -97,7 +95,6 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
       distance: calculatedDistance,
     };
     
-    // Jeśli dodajemy interwał, automatycznie dodaj regenerację
     if (blockType === 'intervals') {
       const recoveryDefaults = blockDefaults.recovery;
       const recoveryPace = parsePace(recoveryDefaults.pace);
@@ -121,16 +118,17 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   };
 
   const deleteBlock = (id) => {
+    if (readOnly) return;
     setBlocks(blocks.filter(b => b.id !== id));
     if (selectedBlock === id) setSelectedBlock(null);
   };
 
   const updateBlock = (id, updates) => {
+    if (readOnly) return;
     setBlocks(blocks.map(b => {
       if (b.id === id) {
         const updated = { ...b, ...updates };
         
-        // Automatycznie oblicz dystans z czasu i tempa
         if (updated.duration && updated.pace) {
           const paceMinutes = parsePace(updated.pace);
           if (paceMinutes) {
@@ -150,7 +148,6 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
 
   const getTotalDistance = () => {
     return blocks.reduce((sum, block) => {
-      // Oblicz dystans z czasu i tempa jeśli nie ma podanego dystansu
       if (block.distance) return sum + block.distance;
       if (block.duration && block.pace) {
         const paceMinutes = parsePace(block.pace);
@@ -170,12 +167,10 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   };
 
   const paceToHeight = (pace) => {
-    // Konwersja tempa na wysokość bloku
-    // Szybsze tempo (niższa wartość) = wyższy blok
+    
     const paceMinutes = parsePace(pace);
     if (!paceMinutes) return 50;
     
-    // Tempo 3:00/km = 100%, tempo 8:00/km = 20%
     const minPace = 3.0;
     const maxPace = 8.0;
     const normalized = (maxPace - paceMinutes) / (maxPace - minPace);
@@ -183,7 +178,6 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   };
 
   const heightToPace = (heightPercent) => {
-    // Konwersja wysokości bloku na tempo
     const minPace = 3.0;
     const maxPace = 8.0;
     const paceMinutes = maxPace - ((heightPercent / 100) * (maxPace - minPace));
@@ -203,9 +197,9 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   const handleMouseDown = (e, blockId, edge = null) => {
     e.preventDefault();
     e.stopPropagation();
+    if (readOnly) return;
     
     if (edge) {
-      // Rozpocznij resize
       const block = blocks.find(b => b.id === blockId);
       setResizingBlock(blockId);
       setResizeEdge(edge);
@@ -217,6 +211,7 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   };
 
   const handleMouseMove = (e) => {
+    if (readOnly) return;
     if (resizingBlock !== null && resizeEdge) {
       const deltaX = e.clientX - resizeStartX;
       const totalWidth = e.currentTarget?.offsetWidth || 800;
@@ -234,18 +229,100 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
     setResizeEdge(null);
   };
 
+  const handleCornerResizeStart = (e, blockId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (readOnly) return;
+
+    const block = blocks.find((b) => b.id === blockId);
+    if (!block) return;
+
+    const startHeight = paceToHeight(block.pace);
+    const startTotalDuration = getTotalDuration();
+    const startUseAbsoluteWidth = blocks.length > 5;
+    const timelineWidth = timelineRef.current?.offsetWidth || 800;
+    const pixelsPerMinuteRelative = timelineWidth / Math.max(startTotalDuration, 60);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startDuration = block.duration || 1;
+
+    setCornerResizingBlock(blockId);
+
+    const onMove = (moveEvent) => {
+      setBlocks((prevBlocks) => {
+        const current = prevBlocks.find((b) => b.id === blockId);
+        if (!current) return prevBlocks;
+
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = startY - moveEvent.clientY;
+
+        const ppm = startUseAbsoluteWidth ? 8 : pixelsPerMinuteRelative;
+        const deltaMinutes = Math.round(deltaX / ppm);
+        const newDuration = Math.max(1, startDuration + deltaMinutes);
+
+        const newHeight = Math.max(20, Math.min(100, startHeight + deltaY / 2));
+        const newPace = heightToPace(newHeight);
+
+        return prevBlocks.map((b) => {
+          if (b.id !== blockId) return b;
+          const updated = { ...b, duration: newDuration, pace: newPace };
+
+          if (updated.duration && updated.pace) {
+            const paceMinutes = parsePace(updated.pace);
+            if (paceMinutes) {
+              updated.distance = parseFloat((updated.duration / paceMinutes).toFixed(2));
+            }
+          }
+          return updated;
+        });
+      });
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      setCornerResizingBlock(null);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   const handleDragStart = (e, block, index) => {
+    if (readOnly) {
+      e.preventDefault();
+      return;
+    }
     if (resizingBlock) {
       e.preventDefault();
       return;
     }
+    const getDragGroup = (startIndex) => {
+      const current = blocks[startIndex];
+      if (!current) return { startIndex, count: 1 };
+
+      const prev = blocks[startIndex - 1];
+      const next = blocks[startIndex + 1];
+
+      if (current.type === 'intervals' && next?.type === 'recovery') {
+        return { startIndex, count: 2 };
+      }
+      if (current.type === 'recovery' && prev?.type === 'intervals') {
+        return { startIndex: startIndex - 1, count: 2 };
+      }
+      return { startIndex, count: 1 };
+    };
+
+    const group = getDragGroup(index);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
-    setDraggedBlock({ block, index });
+    e.dataTransfer.setData('text/plain', JSON.stringify(group));
+    setDraggedBlock(group);
+    draggedBlockRef.current = group;
     setIsDragging(true);
   };
 
   const handleDragOver = (e, index) => {
+    if (readOnly) return;
     e.preventDefault();
     e.stopPropagation();
     if (!draggedBlock) return;
@@ -254,42 +331,84 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
   };
 
   const handleDragEnter = (e, index) => {
+    if (readOnly) return;
     e.preventDefault();
     setDragOverIndex(index);
   };
 
   const handleDragLeave = (e) => {
     e.preventDefault();
-    // Tylko wyczyść jeśli opuszczamy timeline całkowicie
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverIndex(null);
-    }
   };
 
   const handleDragEnd = () => {
     setIsDragging(false);
     setDraggedBlock(null);
+    draggedBlockRef.current = null;
     setDragOverIndex(null);
+  };
+
+  const getDropIndexFromPointer = (clientX) => {
+    const container = timelineRef.current;
+    if (!container) return blocks.length;
+
+    const blockEls = Array.from(container.querySelectorAll('.timeline-block'));
+    if (blockEls.length === 0) return 0;
+
+    for (let i = 0; i < blockEls.length; i++) {
+      const rect = blockEls[i].getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right) {
+        const midX = rect.left + rect.width / 2;
+        return clientX < midX ? i : i + 1;
+      }
+    }
+
+    for (let i = 0; i < blockEls.length; i++) {
+      const rect = blockEls[i].getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (clientX < midX) return i;
+    }
+    return blockEls.length;
   };
 
   const handleDrop = (e, dropIndex) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (!draggedBlock) return;
+    const currentDragged = draggedBlockRef.current || draggedBlock;
+    if (!currentDragged) return;
 
-    const { index: dragIndex } = draggedBlock;
-    if (dragIndex === dropIndex) {
+    const dragIndex = currentDragged.startIndex;
+    const dragCount = currentDragged.count;
+
+    if (dropIndex >= dragIndex && dropIndex < dragIndex + dragCount) {
       handleDragEnd();
       return;
     }
 
-    const newBlocks = [...blocks];
-    const [movedBlock] = newBlocks.splice(dragIndex, 1);
-    newBlocks.splice(dropIndex, 0, movedBlock);
-    
-    setBlocks(newBlocks);
+    setBlocks((prevBlocks) => {
+      const nextBlocks = [...prevBlocks];
+      const movedBlocks = nextBlocks.splice(dragIndex, dragCount);
+      const insertIndex = dropIndex > dragIndex ? dropIndex - dragCount : dropIndex;
+
+      if (insertIndex === dragIndex) return prevBlocks;
+      nextBlocks.splice(insertIndex, 0, ...movedBlocks);
+      return nextBlocks;
+    });
     handleDragEnd();
+  };
+
+  const handleTimelineDragOver = (e) => {
+    if (readOnly) return;
+    if (!draggedBlockRef.current && !draggedBlock) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(getDropIndexFromPointer(e.clientX));
+  };
+
+  const handleTimelineDrop = (e) => {
+    if (readOnly) return;
+    const idx = getDropIndexFromPointer(e.clientX);
+    handleDrop(e, idx);
   };
 
   const handlePaceResize = (e, blockId) => {
@@ -331,39 +450,52 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
 
       <div 
         className="blocks-timeline"
+        ref={timelineRef}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onDragOver={handleTimelineDragOver}
+        onDrop={handleTimelineDrop}
       >
         {blocks.map((block, index) => {
           const totalDuration = getTotalDuration();
-          // Dla > 5 bloków używamy absolutnej szerokości w pixelach
           const useAbsoluteWidth = blocks.length > 5;
-          const pixelsPerMinute = 8; // 8px na minutę
+          const pixelsPerMinute = 8; 
           const blockWidth = useAbsoluteWidth 
             ? `${block.duration * pixelsPerMinute}px`
             : `${(block.duration / Math.max(totalDuration, 60)) * 100}%`;
           
           const heightPercentage = paceToHeight(block.pace);
           const isDraggedOver = dragOverIndex === index;
+          const isInDraggedGroup =
+            draggedBlock &&
+            index >= draggedBlock.startIndex &&
+            index < draggedBlock.startIndex + draggedBlock.count;
+
+          const prevBlock = blocks[index - 1];
+          const nextBlock = blocks[index + 1];
+          const isInterval = block.type === 'intervals';
+          const isRecovery = block.type === 'recovery';
+          const isIntervalWithRecovery = isInterval && nextBlock?.type === 'recovery';
+          const isRecoveryAfterInterval = isRecovery && prevBlock?.type === 'intervals';
 
           return (
             <div
               key={block.id}
-              draggable={!resizingBlock}
+              draggable={!readOnly && !resizingBlock && !cornerResizingBlock}
               onDragStart={(e) => handleDragStart(e, block, index)}
               onDragOver={(e) => handleDragOver(e, index)}
               onDragEnter={(e) => handleDragEnter(e, index)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, index)}
               onDragEnd={handleDragEnd}
-              className={`timeline-block ${selectedBlock === block.id ? 'selected' : ''} ${isDraggedOver ? 'drag-over' : ''} ${draggedBlock?.index === index ? 'dragging' : ''}`}
+              className={`timeline-block ${useAbsoluteWidth ? 'absolute-width' : ''} ${isIntervalWithRecovery ? 'paired-interval' : ''} ${isRecoveryAfterInterval ? 'paired-recovery' : ''} ${selectedBlock === block.id ? 'selected' : ''} ${isDraggedOver ? 'drag-over' : ''} ${isInDraggedGroup ? 'dragging' : ''}`}
               style={{
                 width: blockWidth,
                 height: `${heightPercentage}%`,
                 backgroundColor: getBlockColor(block.type),
                 position: 'relative',
-                cursor: resizingBlock ? 'default' : 'grab',
+                cursor: readOnly ? 'default' : (resizingBlock ? 'default' : 'grab'),
               }}
               onClick={(e) => {
                 if (!isDragging) {
@@ -371,66 +503,81 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
                 }
               }}
             >
-              {/* Left resize handle */}
-              <div
-                className="resize-handle-horizontal resize-left"
-                onMouseDown={(e) => handleMouseDown(e, block.id, 'left')}
-              />
-              
-              {/* Right resize handle */}
-              <div
-                className="resize-handle-horizontal resize-right"
-                onMouseDown={(e) => handleMouseDown(e, block.id, 'right')}
-              />
-              
-              {/* Top resize handle for pace */}
-              <div
-                className="resize-handle"
-                onMouseDown={(e) => handlePaceResize(e, block.id)}
-              >
-                <GripVertical size={14} />
-              </div>
+              {!readOnly && (
+                <>
+                  <div
+                    className="resize-handle-horizontal resize-left"
+                    onMouseDown={(e) => handleMouseDown(e, block.id, 'left')}
+                  />
+
+                  <div
+                    className="resize-handle-horizontal resize-right"
+                    onMouseDown={(e) => handleMouseDown(e, block.id, 'right')}
+                  />
+
+                  <div
+                    className="corner-resize-handle"
+                    onMouseDown={(e) => handleCornerResizeStart(e, block.id)}
+                    title="Zmień czas i tempo"
+                  />
+
+                  <div
+                    className="pace-resize-handle"
+                    onMouseDown={(e) => handlePaceResize(e, block.id)}
+                    title="Zmień tempo"
+                  />
+                </>
+              )}
 
               <div className="block-label">
                 <span className="block-type">{getBlockLabel(block.type)}</span>
+                {block.type === 'intervals' && (block.repetitions || 1) > 1 && (
+                  <span className="block-reps">{block.repetitions}x</span>
+                )}
                 <span className="block-duration">{block.duration}min</span>
                 <span className="block-pace">{block.pace}/km</span>
               </div>
 
-              <button
-                className="block-delete"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteBlock(block.id);
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
+              {!readOnly && (
+                <button
+                  className="block-delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteBlock(block.id);
+                  }}
+                  title="Usuń blok"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           );
         })}
 
-        <div className="add-block-container">
-          <button 
-            className="add-block-btn"
-            id="add-block-btn"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setMenuPosition({
-                top: rect.top - 8,
-                left: rect.left
-              });
-              setShowBlockTypeMenu(!showBlockTypeMenu);
-            }}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="add-block-container">
+            <button 
+              className="add-block-btn"
+              id="add-block-btn"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenuPosition({
+                  top: rect.top - 8,
+                  left: rect.left
+                });
+                setShowBlockTypeMenu(!showBlockTypeMenu);
+              }}
+              title="Dodaj blok"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {showBlockTypeMenu && (
+      {!readOnly && showBlockTypeMenu && (
         <div 
           className="block-type-menu"
           style={{
@@ -488,6 +635,7 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
                 onChange={(e) => updateBlock(block.id, { duration: parseInt(e.target.value) || 0 })}
                 min="1"
                 max="180"
+                disabled={readOnly}
               />
             </div>
 
@@ -498,6 +646,7 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
                 value={block.pace}
                 onChange={(e) => updateBlock(block.id, { pace: e.target.value })}
                 placeholder="4:30"
+                disabled={readOnly}
               />
             </div>
 
@@ -525,6 +674,7 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
                     onChange={(e) => updateBlock(block.id, { repetitions: parseInt(e.target.value) || 1 })}
                     min="1"
                     max="20"
+                    disabled={readOnly}
                   />
                 </div>
 
@@ -535,6 +685,7 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange }) {
                     value={block.intervalDistance || 400}
                     onChange={(e) => updateBlock(block.id, { intervalDistance: parseInt(e.target.value) || 400 })}
                     step="100"
+                    disabled={readOnly}
                   />
                 </div>
 

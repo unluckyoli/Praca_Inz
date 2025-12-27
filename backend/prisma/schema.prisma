@@ -335,6 +335,7 @@ model PlanWorkout {
   id              String          @id @default(uuid())
   planWeekId      String
   dayOfWeek       Int             // 1-7 (poniedziałek-niedziela)
+  order           Int             @default(0) // Kolejność w danym dniu
   workoutType     WorkoutType
   name            String          // np. "Easy Run", "Tempo 5km"
   description     String          @db.Text  // Szczegółowy opis ćwiczenia
@@ -353,6 +354,7 @@ model PlanWorkout {
 
   @@index([planWeekId])
   @@index([dayOfWeek])
+  @@index([planWeekId, dayOfWeek, order])
 }
 
 enum TrainingPlanStatus {
@@ -372,6 +374,7 @@ enum WorkoutType {
   HILL_REPEATS
   CROSS_TRAINING
   REST
+  REST_MOBILITY
 }
 
 enum DataSource {
