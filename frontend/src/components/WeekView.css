@@ -385,6 +385,37 @@
   color: #6b7280;
 }
 
+.workout-badge,
+.workout-badge.compact {
+  position: relative;
+}
+
+.workout-hover-tooltip-fixed {
+  position: fixed;
+  background: rgba(17, 24, 39, 0.96);
+  color: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.workout-hover-tooltip-fixed.above {
+  transform: translateY(-100%);
+}
+
+.workout-hover-line {
+  font-size: 0.78rem;
+  line-height: 1.25;
+  color: #e5e7eb;
+  margin: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .workout-stat {
   display: flex;
   align-items: center;

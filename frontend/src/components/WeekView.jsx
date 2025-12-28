@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { GripVertical, Plus, ChevronRight, ChevronDown, ChevronUp, X } from "lucide-react";
 import "./WeekView.css";
 
@@ -8,6 +9,7 @@ function WeekView({ week, onWorkoutClick, onWorkoutMove, onAddWorkout, onWorkout
   const [showDayModal, setShowDayModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
   const [dragOverWorkout, setDragOverWorkout] = useState(null);
+  const [hoverTip, setHoverTip] = useState(null); // { lines, left, top, placement, width }
   const [isExpanded, setIsExpanded] = useState(() => {
     const saved = localStorage.getItem(`week-${week?.id}-expanded`);
     return saved !== null ? JSON.parse(saved) : true;
@@ -60,6 +62,120 @@ function WeekView({ week, onWorkoutClick, onWorkoutMove, onAddWorkout, onWorkout
     REST: "😴",
     REST_MOBILITY: "🧘",
   };
+
+  const parseIntervals = (intervals) => {
+    if (!intervals) return null;
+    try {
+      return typeof intervals === "string" ? JSON.parse(intervals) : intervals;
+    } catch {
+      return null;
+    }
+  };
+
+  const fmtPace = (pace) => (pace ? `${pace}/km` : "");
+
+  const summarizeBlocks = (blocks) => {
+    if (!Array.isArray(blocks) || blocks.length === 0) return null;
+    const warmup = blocks.find((b) => b?.type === "warmup");
+    const cooldown = blocks.findLast ? blocks.findLast((b) => b?.type === "cooldown") : [...blocks].reverse().find((b) => b?.type === "cooldown");
+    const main = blocks.filter((b) => !["warmup", "cooldown"].includes(b?.type));
+
+    // find first interval+recovery pattern and count repeats
+    let mainLine = null;
+    for (let i = 0; i < main.length - 1; i++) {
+      const a = main[i];
+      const b = main[i + 1];
+      if (a?.type === "intervals" && b?.type === "recovery") {
+        const durA = Math.round(Number(a.duration) || 0);
+        const durB = Math.round(Number(b.duration) || 0);
+        const paceA = a.pace;
+        const sig = `${durA}|${paceA}|${durB}`;
+        let count = 1;
+        let j = i + 2;
+        while (j + 1 < main.length) {
+          const aa = main[j];
+          const bb = main[j + 1];
+          if (aa?.type !== "intervals" || bb?.type !== "recovery") break;
+          const sig2 = `${Math.round(Number(aa.duration) || 0)}|${aa.pace}|${Math.round(Number(bb.duration) || 0)}`;
+          if (sig2 !== sig) break;
+          count += 1;
+          j += 2;
+        }
+        mainLine = `${count}x (${durA}min ${fmtPace(paceA)} + ${durB}min rec)`;
+        break;
+      }
+    }
+
+    if (!mainLine) {
+      const tempo = main.find((b) => b?.type === "tempo");
+      const primary = tempo || main.find((b) => b?.type === "main") || main[0];
+      if (primary?.duration) {
+        mainLine = `${Math.round(primary.duration)}min ${fmtPace(primary.pace)}`.trim();
+      }
+    }
+
+    const lines = [];
+    if (warmup?.duration) lines.push(`Rozgrzewka: ${Math.round(warmup.duration)}min ${fmtPace(warmup.pace)}`.trim());
+    if (mainLine) lines.push(mainLine);
+    if (cooldown?.duration) lines.push(`Wychłodzenie: ${Math.round(cooldown.duration)}min ${fmtPace(cooldown.pace)}`.trim());
+    return lines.filter(Boolean);
+  };
+
+  const getWorkoutPreviewLines = (workout) => {
+    const intervals = parseIntervals(workout?.intervals);
+    if (!intervals) return null;
+    if (intervals.blocks) return summarizeBlocks(intervals.blocks);
+    // legacy string format
+    const lines = [];
+    if (intervals.warmup) lines.push(`Rozgrzewka: ${intervals.warmup}`);
+    if (intervals.main || intervals.intervals) lines.push(intervals.main || intervals.intervals);
+    if (intervals.cooldown) lines.push(`Wychłodzenie: ${intervals.cooldown}`);
+    return lines.length ? lines : null;
+  };
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+  const showTooltipFor = (el, workout) => {
+    if (!el || draggedWorkout) return;
+    const lines = getWorkoutPreviewLines(workout);
+    if (!lines || lines.length === 0) {
+      setHoverTip(null);
+      return;
+    }
+
+    const rect = el.getBoundingClientRect();
+    const margin = 12;
+    const width = Math.min(360, window.innerWidth - margin * 2);
+
+    const left = clamp(rect.left, margin, window.innerWidth - width - margin);
+    const preferBelowTop = rect.bottom + 10;
+    const estimatedHeight = 110; // 3 short lines + padding
+    const fitsBelow = preferBelowTop + estimatedHeight <= window.innerHeight - margin;
+    const placement = fitsBelow ? "below" : "above";
+    const top = placement === "below" ? preferBelowTop : rect.top - 10;
+
+    setHoverTip({
+      lines: lines.slice(0, 3),
+      left,
+      top,
+      placement,
+      width,
+    });
+  };
+
+  const hideTooltip = () => setHoverTip(null);
+
+  useEffect(() => {
+    if (!hoverTip) return;
+    const onScroll = () => setHoverTip(null);
+    const onResize = () => setHoverTip(null);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [hoverTip]);
 
   const getWorkoutsForDay = (dayOfWeek) => {
     if (!week?.workouts) return [];
@@ -248,6 +364,8 @@ function WeekView({ week, onWorkoutClick, onWorkoutMove, onAddWorkout, onWorkout
                     draggable
                     onDragStart={(e) => handleDragStart(e, workouts[0])}
                     onDragEnd={handleDragEnd}
+                    onMouseEnter={(e) => showTooltipFor(e.currentTarget, workouts[0])}
+                    onMouseLeave={hideTooltip}
                     style={{
                       borderLeftColor:
                         workoutTypeColors[workouts[0].workoutType] || "#9ca3af",
@@ -302,6 +420,8 @@ function WeekView({ week, onWorkoutClick, onWorkoutMove, onAddWorkout, onWorkout
                         onDragEnd={handleDragEnd}
                         onDragOver={(e) => handleWorkoutDragOver(e, workout, index)}
                         onDrop={(e) => handleWorkoutDrop(e, workout, index)}
+                        onMouseEnter={(e) => showTooltipFor(e.currentTarget, workout)}
+                        onMouseLeave={hideTooltip}
                         style={{
                           borderLeftColor:
                             workoutTypeColors[workout.workoutType] || "#9ca3af",
@@ -425,6 +545,26 @@ function WeekView({ week, onWorkoutClick, onWorkoutMove, onAddWorkout, onWorkout
           </div>
         </div>
       )}
+
+      {hoverTip &&
+        createPortal(
+          <div
+            className={`workout-hover-tooltip-fixed ${hoverTip.placement}`}
+            style={{
+              left: `${hoverTip.left}px`,
+              top: `${hoverTip.top}px`,
+              width: `${hoverTip.width}px`,
+            }}
+            role="tooltip"
+          >
+            {hoverTip.lines.map((line, idx) => (
+              <div key={idx} className="workout-hover-line">
+                {line}
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

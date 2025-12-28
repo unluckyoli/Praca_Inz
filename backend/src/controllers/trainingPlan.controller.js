@@ -171,6 +171,180 @@ const calculateTotalDistance = (intervals) => {
   }
 };
 
+const parseIntervalsJson = (intervals) => {
+  if (!intervals) return null;
+  try {
+    return typeof intervals === "string" ? JSON.parse(intervals) : intervals;
+  } catch {
+    return null;
+  }
+};
+
+const parsePaceMinutes = (paceStr) => {
+  if (!paceStr) return null;
+  const match = String(paceStr).match(/(\d+):(\d+)/);
+  if (!match) return null;
+  return parseInt(match[1]) + parseInt(match[2]) / 60;
+};
+
+const formatPaceMinPerKm = (minutesPerKm) => {
+  if (!Number.isFinite(minutesPerKm) || minutesPerKm <= 0) return null;
+  const mins = Math.floor(minutesPerKm);
+  const secs = Math.round((minutesPerKm - mins) * 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+const computeFromBlocks = (blocksRaw) => {
+  const blocks = Array.isArray(blocksRaw) ? blocksRaw : [];
+  if (blocks.length === 0) return null;
+
+  const totalDurationMin = blocks.reduce((s, b) => s + (Number(b?.duration) || 0), 0);
+  const totalDistanceKm = blocks.reduce((s, b) => s + (Number(b?.distance) || 0), 0);
+
+  let weightedPaceSum = 0;
+  let weightedMinutes = 0;
+  for (const b of blocks) {
+    const dur = Number(b?.duration) || 0;
+    const paceMin = parsePaceMinutes(b?.pace);
+    if (dur > 0 && paceMin) {
+      weightedPaceSum += paceMin * dur;
+      weightedMinutes += dur;
+    }
+  }
+  const avgPaceMin = weightedMinutes > 0 ? weightedPaceSum / weightedMinutes : null;
+
+  return {
+    totalDurationMin: totalDurationMin > 0 ? Math.round(totalDurationMin) : null,
+    totalDistanceKm: totalDistanceKm > 0 ? Math.round(totalDistanceKm * 10) / 10 : null,
+    avgPace: avgPaceMin != null ? formatPaceMinPerKm(avgPaceMin) : null,
+    blocks,
+  };
+};
+
+const inferIntervalUnit = (block) => {
+  const distanceKm = Number(block?.distance);
+  const durationMin = Number(block?.duration);
+
+  // Prefer "clean" meter distances (400/800/1000/1200/1600/2000/3000) if close.
+  if (Number.isFinite(distanceKm) && distanceKm > 0) {
+    const meters = distanceKm * 1000;
+    const common = [200, 300, 400, 600, 800, 1000, 1200, 1600, 2000, 3000];
+    let best = null;
+    for (const c of common) {
+      const diff = Math.abs(meters - c);
+      if (best == null || diff < best.diff) best = { c, diff };
+    }
+    if (best && best.diff <= 35) {
+      return { unit: "distance", value: best.c }; // meters
+    }
+
+    // Any reasonably "round" distance in 100m steps
+    const rounded100 = Math.round(meters / 100) * 100;
+    if (Math.abs(meters - rounded100) <= 35 && rounded100 >= 100 && rounded100 <= 5000) {
+      return { unit: "distance", value: rounded100 };
+    }
+  }
+
+  if (Number.isFinite(durationMin) && durationMin > 0) {
+    return { unit: "time", value: Math.round(durationMin) };
+  }
+
+  return { unit: "time", value: null };
+};
+
+const generateTitleFromBlocks = (workoutType, blocksRaw) => {
+  const blocks = Array.isArray(blocksRaw) ? blocksRaw : [];
+  if (blocks.length === 0) return null;
+
+  const mainBlocks = blocks.filter((b) => !["warmup", "cooldown"].includes(b?.type));
+  if (mainBlocks.length === 0) return null;
+
+  // Build candidate interval sets from alternating intervals+recovery blocks
+  const candidates = [];
+  let i = 0;
+  while (i < mainBlocks.length - 1) {
+    const a = mainBlocks[i];
+    const b = mainBlocks[i + 1];
+    if (a?.type === "intervals" && b?.type === "recovery") {
+      // Try explicit repetitions if present
+      const reps = Number.isFinite(Number(a?.repetitions)) ? Math.max(1, Number(a.repetitions)) : null;
+      const intervalUnit = inferIntervalUnit(a);
+      const recoveryUnit = inferIntervalUnit(b);
+      const pace = a?.pace ? String(a.pace) : null;
+      const signature = `${intervalUnit.unit}:${intervalUnit.value}|${pace}|rec:${recoveryUnit.unit}:${recoveryUnit.value}`;
+
+      if (reps && reps > 1) {
+        candidates.push({
+          signature,
+          count: reps,
+          interval: a,
+          recovery: b,
+          score: (Number(a?.duration) || 0) * reps,
+        });
+        i += 2;
+        continue;
+      }
+
+      // Otherwise count repeated pairs with same signature
+      let count = 1;
+      let j = i + 2;
+      while (j + 1 < mainBlocks.length) {
+        const aa = mainBlocks[j];
+        const bb = mainBlocks[j + 1];
+        if (aa?.type !== "intervals" || bb?.type !== "recovery") break;
+        const iu2 = inferIntervalUnit(aa);
+        const ru2 = inferIntervalUnit(bb);
+        const pace2 = aa?.pace ? String(aa.pace) : null;
+        const sig2 = `${iu2.unit}:${iu2.value}|${pace2}|rec:${ru2.unit}:${ru2.value}`;
+        if (sig2 !== signature) break;
+        count += 1;
+        j += 2;
+      }
+
+      candidates.push({
+        signature,
+        count,
+        interval: a,
+        recovery: b,
+        score: (Number(a?.duration) || 0) * count,
+      });
+
+      i += count * 2;
+      continue;
+    }
+    i += 1;
+  }
+
+  if (candidates.length > 0) {
+    // Choose the main set with highest work-time score
+    const best = candidates.reduce((acc, c) => (c.score > acc.score ? c : acc), candidates[0]);
+    const iu = inferIntervalUnit(best.interval);
+    const ru = inferIntervalUnit(best.recovery);
+    const pace = best.interval?.pace ? String(best.interval.pace) : null;
+
+    const intervalLabel =
+      iu.unit === "distance" && iu.value != null ? `${iu.value}m` : `${Math.round(best.interval.duration)}min`;
+    const recoveryLabel =
+      ru.unit === "distance" && ru.value != null ? `${ru.value}m` : `${Math.round(best.recovery.duration)}min`;
+
+    const paceLabel = pace ? ` @ ${pace}/km` : "";
+    return `${best.count}x(${intervalLabel}${paceLabel} + ${recoveryLabel} rec)`;
+  }
+
+  // No intervals+recovery pattern: use the most "important" single block.
+  const primary =
+    mainBlocks.find((b) => b?.type === "tempo") ||
+    mainBlocks.find((b) => b?.type === "main") ||
+    mainBlocks[0];
+
+  const dur = Number(primary?.duration) || null;
+  if (!dur) return workoutType || "Trening";
+
+  if (primary?.type === "tempo") return `Tempo ${Math.round(dur)}min`;
+  if (String(workoutType || "").includes("FARTLEK")) return `Fartlek ${Math.round(dur)}min`;
+  return `${Math.round(dur)}min`;
+};
+
 const validateAndFixWorkout = (workout) => {
   console.log('[Validate] BEFORE:', {
     name: workout.name,
@@ -272,31 +446,65 @@ const validateAndFixWorkout = (workout) => {
   }
 
   if (fixed.intervals && fixed.workoutType !== 'REST') {
-    const calculatedDistance = calculateTotalDistance(fixed.intervals);
-    if (calculatedDistance && calculatedDistance > 0) {
-      fixed.targetDistance = calculatedDistance;
-      console.log(`[Validate] Calculated distance from intervals: ${calculatedDistance}km`);
-    }
-    
-    const calculatedDuration = calculateWorkoutDuration(fixed.intervals, fixed.targetDistance, fixed.targetPace);
-    if (calculatedDuration && calculatedDuration > 0) {
-      fixed.targetDuration = calculatedDuration;
-      console.log(`[Validate] Calculated duration from intervals: ${calculatedDuration}min`);
+    const intervalsData = parseIntervalsJson(fixed.intervals);
+
+    if (intervalsData?.blocks && Array.isArray(intervalsData.blocks)) {
+      const computed = computeFromBlocks(intervalsData.blocks);
+      if (computed?.totalDistanceKm) {
+        fixed.targetDistance = computed.totalDistanceKm;
+        console.log(`[Validate] Calculated distance from blocks: ${computed.totalDistanceKm}km`);
+      }
+      if (computed?.totalDurationMin) {
+        fixed.targetDuration = computed.totalDurationMin;
+        console.log(`[Validate] Calculated duration from blocks: ${computed.totalDurationMin}min`);
+      }
+      if (computed?.avgPace) {
+        fixed.targetPace = `${computed.avgPace}`;
+      }
+
+      const mainTitle = generateTitleFromBlocks(fixed.workoutType, intervalsData.blocks);
+      if (mainTitle) {
+        const distSuffix =
+          fixed.targetDistance && fixed.targetDistance > 0
+            ? ` ${Math.round(fixed.targetDistance * 10) / 10}km`
+            : "";
+        const durSuffix =
+          fixed.targetDuration && fixed.targetDuration > 0 ? ` (${fixed.targetDuration}min)` : "";
+        fixed.name = `${mainTitle}${distSuffix}${durSuffix}`.trim();
+      }
+
+      // Normalize stored intervals format
+      fixed.intervals = { blocks: intervalsData.blocks };
+    } else {
+      const calculatedDistance = calculateTotalDistance(fixed.intervals);
+      if (calculatedDistance && calculatedDistance > 0) {
+        fixed.targetDistance = calculatedDistance;
+        console.log(`[Validate] Calculated distance from intervals: ${calculatedDistance}km`);
+      }
+      
+      const calculatedDuration = calculateWorkoutDuration(fixed.intervals, fixed.targetDistance, fixed.targetPace);
+      if (calculatedDuration && calculatedDuration > 0) {
+        fixed.targetDuration = calculatedDuration;
+        console.log(`[Validate] Calculated duration from intervals: ${calculatedDuration}min`);
+      }
     }
   }
   
   if (fixed.workoutType !== 'REST') {
-    let baseName = fixed.name.replace(/\s*\d+(?:\.\d+)?km/, '').replace(/\s*\(\d+min\)\s*$/, '').trim();
-    
-    if (fixed.targetDistance > 0) {
-      const distanceKm = Math.round(fixed.targetDistance * 10) / 10; 
-      baseName = `${baseName} ${distanceKm}km`;
+    // If name wasn't rebuilt from blocks, keep legacy suffix behavior.
+    if (!fixed.name || !fixed.name.includes("km") || !fixed.name.includes("min")) {
+      let baseName = (fixed.name || "").replace(/\s*\d+(?:\.\d+)?km/i, '').replace(/\s*\(\d+min\)\s*$/i, '').trim();
+      if (!baseName) baseName = fixed.workoutType || "Trening";
+
+      if (fixed.targetDistance > 0) {
+        const distanceKm = Math.round(fixed.targetDistance * 10) / 10;
+        baseName = `${baseName} ${distanceKm}km`;
+      }
+      if (fixed.targetDuration > 0) {
+        baseName = `${baseName} (${fixed.targetDuration}min)`;
+      }
+      fixed.name = baseName;
     }
-    if (fixed.targetDuration > 0) {
-      baseName = `${baseName} (${fixed.targetDuration}min)`;
-    }
-    
-    fixed.name = baseName;
   }
 
   console.log('[Validate] AFTER:', {
@@ -306,6 +514,33 @@ const validateAndFixWorkout = (workout) => {
     targetPace: fixed.targetPace
   });
 
+  return fixed;
+};
+
+const recomputeWorkoutFieldsFromBlocks = (workout) => {
+  const fixed = { ...workout };
+  const intervalsData = parseIntervalsJson(fixed.intervals);
+  if (!intervalsData?.blocks || !Array.isArray(intervalsData.blocks) || intervalsData.blocks.length === 0) {
+    return null;
+  }
+
+  const computed = computeFromBlocks(intervalsData.blocks);
+  if (computed?.totalDistanceKm) fixed.targetDistance = computed.totalDistanceKm;
+  if (computed?.totalDurationMin) fixed.targetDuration = computed.totalDurationMin;
+  if (computed?.avgPace) fixed.targetPace = `${computed.avgPace}/km`;
+
+  const mainTitle = generateTitleFromBlocks(fixed.workoutType, intervalsData.blocks);
+  if (mainTitle) {
+    const distSuffix =
+      fixed.targetDistance && fixed.targetDistance > 0
+        ? ` ${Math.round(fixed.targetDistance * 10) / 10}km`
+        : "";
+    const durSuffix =
+      fixed.targetDuration && fixed.targetDuration > 0 ? ` (${fixed.targetDuration}min)` : "";
+    fixed.name = `${mainTitle}${distSuffix}${durSuffix}`.trim();
+  }
+
+  fixed.intervals = { blocks: intervalsData.blocks };
   return fixed;
 };
 
@@ -952,6 +1187,26 @@ export const completeWorkout = async (req, res) => {
       },
     });
 
+    // If synced to Google Tasks, update task status
+    try {
+      if (
+        workout.planWeek?.trainingPlan?.googleTaskListId &&
+        workout.googleTaskId
+      ) {
+        await googleService.upsertTask(
+          userId,
+          workout.planWeek.trainingPlan.googleTaskListId,
+          workout.googleTaskId,
+          {
+            status: "completed",
+            completed: new Date().toISOString(),
+          },
+        );
+      }
+    } catch (e) {
+      console.error("[Google Tasks] Failed to mark task completed:", e?.message || e);
+    }
+
     res.json({
       message: "Workout marked as completed",
       workout: updatedWorkout,
@@ -959,6 +1214,241 @@ export const completeWorkout = async (req, res) => {
   } catch (error) {
     console.error("Complete workout error:", error);
     res.status(500).json({ error: "Failed to complete workout" });
+  }
+};
+
+const formatBlockLine = (b) => {
+  const typeLabelMap = {
+    warmup: "Rozgrzewka",
+    main: "Część główna",
+    tempo: "Tempo",
+    intervals: "Interwał",
+    recovery: "Regeneracja",
+    cooldown: "Wychłodzenie",
+  };
+  const label = typeLabelMap[b?.type] || b?.type || "Block";
+  const dur = Number(b?.duration) ? `${Math.round(Number(b.duration))}min` : null;
+  const pace = b?.pace ? `@ ${b.pace}/km` : null;
+  const dist = Number(b?.distance) ? `${(Math.round(Number(b.distance) * 10) / 10).toFixed(1)}km` : null;
+  const parts = [label + ":", dur, pace, dist ? `(${dist})` : null].filter(Boolean);
+  return `• ${parts.join(" ")}`;
+};
+
+const buildTaskNotes = (workout) => {
+  let notes = workout.description ? `${workout.description}` : "";
+
+  const meta = [];
+  if (workout.targetDistance) meta.push(`📏 Dystans: ${workout.targetDistance.toFixed(1)} km`);
+  if (workout.targetDuration) meta.push(`⏱️ Czas: ${workout.targetDuration} min`);
+  if (workout.targetPace) meta.push(`🎯 Tempo: ${workout.targetPace}`);
+  if (workout.intensity) meta.push(`💪 Intensywność: ${workout.intensity}`);
+
+  if (meta.length) {
+    notes += (notes ? "\n\n" : "") + meta.join("\n");
+  }
+
+  const intervalsData = parseIntervalsJson(workout.intervals);
+  if (intervalsData?.blocks && Array.isArray(intervalsData.blocks) && intervalsData.blocks.length) {
+    notes += (notes ? "\n\n" : "") + "📊 Struktura treningu:\n" + intervalsData.blocks.map(formatBlockLine).join("\n");
+  } else if (workout.intervals) {
+    // legacy
+    try {
+      const intervals = typeof workout.intervals === "string" ? JSON.parse(workout.intervals) : workout.intervals;
+      const lines = [];
+      if (intervals.warmup) lines.push(`• Rozgrzewka: ${intervals.warmup}`);
+      if (intervals.main) lines.push(`• Część główna: ${intervals.main}`);
+      if (intervals.intervals) lines.push(`• Interwały: ${intervals.intervals}`);
+      if (intervals.recovery) lines.push(`• Regeneracja: ${intervals.recovery}`);
+      if (intervals.cooldown) lines.push(`• Wychłodzenie: ${intervals.cooldown}`);
+      if (lines.length) {
+        notes += (notes ? "\n\n" : "") + "📊 Struktura treningu:\n" + lines.join("\n");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (workout.notes) {
+    notes += (notes ? "\n\n" : "") + `📝 Notatki:\n${workout.notes}`;
+  }
+
+  return notes.trim();
+};
+
+const toDueIsoForDate = (date) => {
+  // Store due as midnight UTC for the given day to keep "date-only" semantics stable across timezones.
+  const y = date.getFullYear();
+  const m = date.getMonth();
+  const d = date.getDate();
+  return new Date(Date.UTC(y, m, d, 0, 0, 0)).toISOString();
+};
+
+export const syncPlanToGoogleTasks = async (req, res) => {
+  try {
+    const { id: planId } = req.params;
+    const userId = getUserId(req);
+
+    console.log(`[Sync Tasks] Starting sync for plan ${planId}...`);
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { googleRefreshToken: true, googleScopes: true },
+    });
+
+    if (!user?.googleRefreshToken) {
+      return res.status(409).json({
+        error: "Google integration not ready (missing refresh token). Reconnect Google with offline access.",
+        code: "google_missing_refresh_token",
+        requiresGoogleAuth: true,
+      });
+    }
+
+    const tasksScope = "https://www.googleapis.com/auth/tasks";
+    if (!String(user.googleScopes || "").includes(tasksScope)) {
+      return res.status(403).json({
+        error: "Google Tasks permission not granted. Reconnect Google and allow Tasks access.",
+        code: "google_tasks_scope_missing",
+        requiresGoogleAuth: true,
+      });
+    }
+
+    const plan = await prisma.trainingPlan.findFirst({
+      where: { id: planId, userId },
+      include: {
+        weeks: {
+          include: { workouts: true },
+          orderBy: { weekNumber: "asc" },
+        },
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({ error: "Training plan not found" });
+    }
+
+    const listTitle = `Plan treningowy: ${plan.name} (${plan.id.slice(0, 6)})`;
+    let taskList;
+    try {
+      taskList = await googleService.getOrCreateTaskList(userId, listTitle, plan.googleTaskListId);
+    } catch (e) {
+      if (e?.response?.status === 403) {
+        return res.status(403).json({
+          error: "Google Tasks access not granted. Reconnect Google with Tasks permission.",
+          requiresGoogleAuth: true,
+          code: "google_tasks_scope_missing",
+        });
+      }
+      if (e?.response?.status === 401) {
+        return res.status(401).json({
+          error: "Google authorization invalid or revoked. Reconnect Google.",
+          code: "google_auth_invalid",
+          requiresGoogleAuth: true,
+        });
+      }
+      throw e;
+    }
+
+    if (!plan.googleTaskListId || plan.googleTaskListId !== taskList.id) {
+      await prisma.trainingPlan.update({
+        where: { id: planId },
+        data: { googleTaskListId: taskList.id },
+      });
+    }
+
+    let tasksCreated = 0;
+    let tasksUpdated = 0;
+    const errors = [];
+
+    let startDate;
+    if (plan.targetRaceDate) {
+      startDate = new Date(plan.targetRaceDate);
+      startDate.setDate(startDate.getDate() - plan.weeksCount * 7);
+    } else {
+      startDate = new Date();
+      const dayOfWeek = startDate.getDay();
+      const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek) % 7;
+      startDate.setDate(startDate.getDate() + daysUntilMonday);
+    }
+
+    const allWorkouts = plan.weeks.flatMap((w) => w.workouts);
+    const workoutsToSync = allWorkouts.filter((w) => !["REST", "REST_MOBILITY"].includes(w.workoutType));
+
+    for (const week of plan.weeks) {
+      for (const workout of week.workouts) {
+        if (["REST", "REST_MOBILITY"].includes(workout.workoutType)) continue;
+
+        try {
+          const workoutDate = new Date(startDate);
+          workoutDate.setDate(
+            workoutDate.getDate() + (week.weekNumber - 1) * 7 + (workout.dayOfWeek - 1),
+          );
+
+          const taskData = {
+            title: workout.name,
+            notes: buildTaskNotes(workout),
+            due: toDueIsoForDate(workoutDate),
+            status: workout.completed ? "completed" : "needsAction",
+            ...(workout.completed ? { completed: (workout.completedAt ? new Date(workout.completedAt) : new Date()).toISOString() } : {}),
+          };
+
+          const beforeId = workout.googleTaskId;
+          const task = await googleService.upsertTask(userId, taskList.id, workout.googleTaskId, taskData);
+
+          if (!beforeId) tasksCreated++;
+          else tasksUpdated++;
+
+          if (!workout.googleTaskId || workout.googleTaskId !== task.id) {
+            await prisma.planWorkout.update({
+              where: { id: workout.id },
+              data: { googleTaskId: task.id },
+            });
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        } catch (error) {
+          console.error(`[Sync Tasks] Error syncing workout ${workout.id} (${workout.name}):`, error?.message || error);
+          if (error.response?.status === 403) {
+            errors.push({
+              workoutId: workout.id,
+              workoutName: workout.name,
+              error: "Insufficient permissions (Tasks scope missing). Reconnect Google.",
+            });
+          } else {
+            errors.push({
+              workoutId: workout.id,
+              workoutName: workout.name,
+              error: error.message,
+              details: error.response?.data || error.stack,
+            });
+          }
+
+          if (error.response?.status === 429 || error.message?.includes("Rate Limit")) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
+      }
+    }
+
+    await prisma.trainingPlan.update({
+      where: { id: planId },
+      data: {
+        syncedToGoogleTasks: true,
+        googleTasksSyncDate: new Date(),
+      },
+    });
+
+    res.json({
+      message: "Training plan synced to Google Tasks",
+      taskListId: taskList.id,
+      tasksCreated,
+      tasksUpdated,
+      totalTasks: tasksCreated + tasksUpdated,
+      errors: errors.length ? errors : undefined,
+      totalWorkouts: workoutsToSync.length,
+    });
+  } catch (error) {
+    console.error("Error syncing plan to tasks:", error);
+    res.status(500).json({ error: "Failed to sync training plan to tasks" });
   }
 };
 
@@ -1021,6 +1511,25 @@ export const deleteTrainingPlan = async (req, res) => {
       return res.status(404).json({ error: "Training plan not found" });
     }
 
+    // Google Tasks cleanup: delete whole tasklist if we own it for this plan
+    if (plan.syncedToGoogleTasks && plan.googleTaskListId) {
+      console.log(`[Delete Plan] Plan was synced to Google Tasks, removing task list...`);
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { googleRefreshToken: true },
+      });
+
+      if (user?.googleRefreshToken) {
+        try {
+          await googleService.deleteTaskList(userId, plan.googleTaskListId);
+          console.log(`[Delete Plan] Deleted Google Tasks list ${plan.googleTaskListId}`);
+        } catch (e) {
+          console.error(`[Delete Plan] Failed to delete Google Tasks list:`, e?.message || e);
+        }
+      }
+    }
+
+    // Legacy Google Calendar cleanup (kept for backwards compatibility / already-synced plans)
     if (plan.syncedToCalendar) {
       console.log(`[Delete Plan] Plan was synced to calendar, removing events...`);
       
@@ -1074,6 +1583,7 @@ export const deleteTrainingPlan = async (req, res) => {
     res.json({ 
       message: "Training plan deleted successfully",
       calendarEventsDeleted: plan.syncedToCalendar,
+      googleTasksListDeleted: !!plan.googleTaskListId,
     });
   } catch (error) {
     console.error("Delete training plan error:", error);
@@ -1374,6 +1884,16 @@ export const getSessionById = async (req, res) => {
 
 export const syncPlanToCalendar = async (req, res) => {
   try {
+    // Backwards-compatible endpoint. New implementation uses Google Tasks.
+    return await syncPlanToGoogleTasks(req, res);
+  } catch (error) {
+    console.error("Error syncing plan (compat) to tasks:", error);
+    return res.status(500).json({ error: "Failed to sync training plan" });
+  }
+};
+
+export const syncPlanToCalendarLegacy = async (req, res) => {
+  try {
     const { id: planId } = req.params;
     const userId = getUserId(req);
     
@@ -1583,20 +2103,27 @@ export const updateWorkout = async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    // Aktualizuj workout
+    // Aktualizuj workout (single source of truth: if blocks exist, recompute title/targets deterministically)
+    const candidate = {
+      name,
+      description,
+      targetDistance,
+      targetDuration,
+      targetPace,
+      intensity,
+      intervals,
+      dayOfWeek,
+      workoutType,
+      order,
+    };
+
+    const recomputed = recomputeWorkoutFieldsFromBlocks(candidate);
+    const dataToSave = recomputed || candidate;
+
     const updatedWorkout = await prisma.planWorkout.update({
       where: { id: workoutId },
       data: {
-        name,
-        description,
-        targetDistance,
-        targetDuration,
-        targetPace,
-        intensity,
-        intervals,
-        dayOfWeek,
-        workoutType,
-        order,
+        ...dataToSave,
       },
     });
 
@@ -1620,6 +2147,74 @@ export const updateWorkout = async (req, res) => {
   } catch (error) {
     console.error('Error updating workout:', error);
     res.status(500).json({ error: 'Failed to update workout' });
+  }
+};
+
+export const recomputePlanWorkouts = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { planId } = req.params;
+
+    const plan = await prisma.trainingPlan.findFirst({
+      where: { id: planId, userId },
+      include: {
+        weeks: {
+          include: { workouts: true },
+        },
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({ error: "Training plan not found" });
+    }
+
+    const workouts = plan.weeks.flatMap((w) => w.workouts || []);
+
+    let processed = 0;
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const w of workouts) {
+      processed++;
+      try {
+        if (w.workoutType === "REST" || w.workoutType === "REST_MOBILITY") {
+          skipped++;
+          continue;
+        }
+
+        const recomputed = recomputeWorkoutFieldsFromBlocks(w);
+        if (!recomputed) {
+          skipped++;
+          continue;
+        }
+
+        await prisma.planWorkout.update({
+          where: { id: w.id },
+          data: {
+            name: recomputed.name,
+            targetDistance: recomputed.targetDistance,
+            targetDuration: recomputed.targetDuration,
+            targetPace: recomputed.targetPace,
+            intervals: recomputed.intervals,
+          },
+        });
+        updated++;
+      } catch (e) {
+        errors++;
+      }
+    }
+
+    res.json({
+      message: "Recomputed workout titles & targets from intervals.blocks",
+      processed,
+      updated,
+      skipped,
+      errors,
+    });
+  } catch (error) {
+    console.error("Recompute plan workouts error:", error);
+    res.status(500).json({ error: "Failed to recompute plan workouts" });
   }
 };
 
@@ -1740,6 +2335,14 @@ export const deleteWorkout = async (req, res) => {
         await googleService.deleteCalendarEvent(userId, workout.googleEventId);
       } catch (error) {
         console.error('Error deleting calendar event:', error);
+      }
+    }
+
+    if (workout.googleTaskId && workout.planWeek?.trainingPlan?.googleTaskListId) {
+      try {
+        await googleService.deleteTask(userId, workout.planWeek.trainingPlan.googleTaskListId, workout.googleTaskId);
+      } catch (error) {
+        console.error('Error deleting Google Task:', error);
       }
     }
 

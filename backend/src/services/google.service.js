@@ -19,7 +19,7 @@ export const getAuthUrl = (userId) => {
   const oauth2Client = createOAuth2Client();
   
   const scopes = [
-    'https://www.googleapis.com/auth/calendar', 
+    'https://www.googleapis.com/auth/tasks',
     'https://www.googleapis.com/auth/userinfo.email',
   ];
 
@@ -27,6 +27,7 @@ export const getAuthUrl = (userId) => {
     access_type: 'offline',
     scope: scopes,
     prompt: 'consent',
+    include_granted_scopes: true,
     state: userId,
   });
 };
@@ -57,7 +58,7 @@ export const getAuthenticatedClient = async (userId) => {
   });
 
   if (!user?.googleRefreshToken) {
-    throw new Error('User not connected to Google Calendar');
+    throw new Error('User not connected to Google');
   }
 
   const oauth2Client = createOAuth2Client();
@@ -82,6 +83,78 @@ export const getAuthenticatedClient = async (userId) => {
   }
 
   return oauth2Client;
+};
+
+export const getTasksClient = async (userId) => {
+  const auth = await getAuthenticatedClient(userId);
+  return google.tasks({ version: "v1", auth });
+};
+
+export const getOrCreateTaskList = async (userId, title, existingTaskListId = null) => {
+  const tasks = await getTasksClient(userId);
+
+  if (existingTaskListId) {
+    try {
+      const res = await tasks.tasklists.get({ tasklist: existingTaskListId });
+      return res.data;
+    } catch (e) {
+      // fallthrough and create new list
+    }
+  }
+
+  // Try to find by title (best-effort; title is not guaranteed unique)
+  try {
+    const listRes = await tasks.tasklists.list({ maxResults: 100 });
+    const existing = (listRes.data.items || []).find((l) => l.title === title);
+    if (existing) return existing;
+  } catch {
+    // ignore
+  }
+
+  const created = await tasks.tasklists.insert({
+    requestBody: { title },
+  });
+  return created.data;
+};
+
+export const upsertTask = async (userId, taskListId, taskId, taskData) => {
+  const tasks = await getTasksClient(userId);
+
+  if (taskId) {
+    try {
+      const res = await tasks.tasks.patch({
+        tasklist: taskListId,
+        task: taskId,
+        requestBody: taskData,
+      });
+      return res.data;
+    } catch (e) {
+      // fallthrough to create
+    }
+  }
+
+  const res = await tasks.tasks.insert({
+    tasklist: taskListId,
+    requestBody: taskData,
+  });
+  return res.data;
+};
+
+export const deleteTask = async (userId, taskListId, taskId) => {
+  if (!taskId) return;
+  const tasks = await getTasksClient(userId);
+  await tasks.tasks.delete({
+    tasklist: taskListId,
+    task: taskId,
+  });
+};
+
+export const deleteTaskList = async (userId, taskListId) => {
+  if (!taskListId) return;
+  const tasks = await getTasksClient(userId);
+  await tasks.tasklists.delete({
+    tasklist: taskListId,
+  });
 };
 
 export const createCalendarEvent = async (userId, eventData) => {
@@ -160,6 +233,11 @@ export default {
   exchangeCodeForTokens,
   refreshAccessToken,
   getAuthenticatedClient,
+  getTasksClient,
+  getOrCreateTaskList,
+  upsertTask,
+  deleteTask,
+  deleteTaskList,
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,

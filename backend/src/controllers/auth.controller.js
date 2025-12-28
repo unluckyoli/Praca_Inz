@@ -307,6 +307,11 @@ export const getCurrentUser = async (req, res) => {
       isStravaConnected = !expiresAt || now < expiresAt;
     }
 
+    const scopes = user.googleScopes || "";
+    const tasksScope = "https://www.googleapis.com/auth/tasks";
+    const googleConnected = !!user.googleRefreshToken;
+    const googleTasksReady = googleConnected && scopes.includes(tasksScope);
+
     res.json({
       user: {
         id: user.id,
@@ -317,6 +322,11 @@ export const getCurrentUser = async (req, res) => {
         hasStravaData: isStravaConnected,
         hasGarminData: !!user.garminId,
         hasGoogleCalendar: !!user.googleRefreshToken,
+        googleIntegration: {
+          connected: googleConnected,
+          tasksReady: googleTasksReady,
+          scopes: user.googleScopes || null,
+        },
         stats: user.userStats,
       },
     });
@@ -618,12 +628,24 @@ export const googleCallback = async (req, res) => {
     const tokens = await googleService.exchangeCodeForTokens(code);
 
     // Zapisz tokeny w bazie
+    const updateData = {
+      googleAccessToken: tokens.access_token,
+      googleTokenExpiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+    };
+
+    // IMPORTANT: Google often omits refresh_token on repeated consent. Do NOT wipe existing refresh token.
+    if (tokens.refresh_token) {
+      updateData.googleRefreshToken = tokens.refresh_token;
+    }
+
+    if (tokens.scope) {
+      updateData.googleScopes = tokens.scope;
+    }
+
     await prisma.user.update({
       where: { id: userId },
       data: {
-        googleAccessToken: tokens.access_token,
-        googleRefreshToken: tokens.refresh_token,
-        googleTokenExpiresAt: new Date(tokens.expiry_date),
+        ...updateData,
       },
     });
 
@@ -649,10 +671,11 @@ export const unlinkGoogle = async (req, res) => {
         googleAccessToken: null,
         googleRefreshToken: null,
         googleTokenExpiresAt: null,
+        googleScopes: null,
       },
     });
 
-    res.json({ message: 'Google Calendar disconnected successfully' });
+    res.json({ message: 'Google disconnected successfully' });
   } catch (error) {
     console.error('Error unlinking Google:', error);
     res.status(500).json({ error: 'Failed to unlink Google Calendar' });

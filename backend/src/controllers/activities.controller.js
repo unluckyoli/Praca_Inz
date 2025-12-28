@@ -556,7 +556,13 @@ async function saveGpsPoints(activityId, encodedPolyline) {
   }
 }
 
-async function calculatePowerCurve(activityId, accessToken, stravaActivityId) {
+async function calculatePowerCurve(
+  activityId,
+  userId,
+  activityType,
+  accessToken,
+  stravaActivityId,
+) {
   try {
     const streams = await stravaService.getActivityStreams(
       accessToken,
@@ -566,27 +572,52 @@ async function calculatePowerCurve(activityId, accessToken, stravaActivityId) {
 
     if (streams?.watts?.data && streams.watts.data.length > 0) {
       const powerData = streams.watts.data;
-      const durations = [5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800, 3600];
-
-      for (const duration of durations) {
-        if (duration <= powerData.length) {
-          let maxAvgPower = 0;
-
-          for (let i = 0; i <= powerData.length - duration; i++) {
-            const slice = powerData.slice(i, i + duration);
-            const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
-            maxAvgPower = Math.max(maxAvgPower, avg);
-          }
-
-          await prisma.powerCurve.create({
-            data: {
-              activityId,
-              duration,
-              power: Math.round(maxAvgPower),
-            },
-          });
+      const maxAvg = (durationSec) => {
+        if (durationSec > powerData.length) return null;
+        let best = 0;
+        for (let i = 0; i <= powerData.length - durationSec; i++) {
+          const slice = powerData.slice(i, i + durationSec);
+          const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
+          if (avg > best) best = avg;
         }
-      }
+        return best > 0 ? Math.round(best) : null;
+      };
+
+      const sec5 = maxAvg(5);
+      const sec30 = maxAvg(30);
+      const min1 = maxAvg(60);
+      const min2 = maxAvg(120);
+      const min5 = maxAvg(300);
+      const min10 = maxAvg(600);
+      const min20 = maxAvg(1200);
+      const min60 = maxAvg(3600);
+
+      await prisma.powerCurve.upsert({
+        where: { activityId },
+        create: {
+          activityId,
+          userId,
+          type: activityType || "Ride",
+          sec5,
+          sec30,
+          min1,
+          min2,
+          min5,
+          min10,
+          min20,
+          min60,
+        },
+        update: {
+          sec5,
+          sec30,
+          min1,
+          min2,
+          min5,
+          min10,
+          min20,
+          min60,
+        },
+      });
 
       console.log(`Calculated power curve`);
     }
@@ -689,10 +720,14 @@ async function calculatePaceDistances(
       }
 
       if (Object.keys(paceData).length > 0) {
-        await prisma.paceDistance.create({
-          data: {
+        await prisma.paceDistance.upsert({
+          where: { activityId },
+          create: {
             activityId,
             userId,
+            ...paceData,
+          },
+          update: {
             ...paceData,
           },
         });
@@ -738,10 +773,14 @@ async function calculatePaceDistances(
 
 
         if (Object.keys(paceData).length > 0) {
-          await prisma.paceDistance.create({
-            data: {
+          await prisma.paceDistance.upsert({
+            where: { activityId },
+            create: {
               activityId,
               userId,
+              ...paceData,
+            },
+            update: {
               ...paceData,
             },
           });
@@ -886,7 +925,13 @@ export const fetchActivityDetails = async (req, res) => {
     }
 
     if (activity.averagePower && activity.averagePower > 0) {
-      await calculatePowerCurve(activity.id, accessToken, activity.externalId);
+      await calculatePowerCurve(
+        activity.id,
+        userId,
+        activity.type,
+        accessToken,
+        activity.externalId,
+      );
     }
 
     console.log(`Activity ${activity.id} details fetched successfully`);
@@ -898,5 +943,206 @@ export const fetchActivityDetails = async (req, res) => {
   } catch (error) {
     console.error("Fetch activity details error:", error);
     res.status(500).json({ error: "Failed to fetch activity details" });
+  }
+};
+
+export const batchFetchActivityDetails = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const accessToken = await getStravaToken(req);
+
+    if (!accessToken) {
+      return res.status(401).json({
+        error: "Not authenticated with Strava",
+        requiresStravaLink: true,
+      });
+    }
+
+    const limitRaw = req.body?.limit ?? req.query?.limit;
+    const limit = Math.max(1, Math.min(parseInt(limitRaw || 50), 200));
+
+    // fetch last N activities for user (most recent)
+    const activities = await prisma.activity.findMany({
+      where: { userId, source: "STRAVA" },
+      orderBy: { startDate: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        externalId: true,
+        name: true,
+        type: true,
+        distance: true,
+        duration: true,
+        averagePower: true,
+      },
+    });
+
+    let processed = 0;
+    let updated = 0;
+    let errors = 0;
+    let rateLimited = false;
+
+    for (const a of activities) {
+      processed++;
+      try {
+        // small delay to reduce rate-limit risk
+        await new Promise((r) => setTimeout(r, 250));
+
+        const detailedActivity = await stravaService.getActivity(accessToken, a.externalId);
+
+        await prisma.activity.update({
+          where: { id: a.id },
+          data: {
+            bestEfforts: detailedActivity.best_efforts || null,
+            laps: detailedActivity.laps || null,
+          },
+        });
+
+        const rawType = a.type?.toLowerCase() || "";
+        const isRunning =
+          rawType.includes("run") || rawType.includes("jog") || rawType.includes("workout");
+
+        // paceDistance + pacePerKm (requires streams)
+        if (isRunning && a.distance > 300) {
+          await calculatePaceDistances(a.id, userId, accessToken, a.externalId);
+        }
+
+        // power curve (requires watts stream)
+        if (a.averagePower && a.averagePower > 0) {
+          await calculatePowerCurve(a.id, userId, a.type, accessToken, a.externalId);
+        }
+
+        updated++;
+      } catch (e) {
+        errors++;
+        if (e?.response?.status === 429) {
+          rateLimited = true;
+          break;
+        }
+      }
+    }
+
+    res.json({
+      message: "Batch activity details fetch completed",
+      requested: limit,
+      processed,
+      updated,
+      errors,
+      rateLimited,
+      note:
+        "Uzupełnianie rekordów pobiera szczegóły i streamy z Stravy — może trafić w limit API. Wtedy spróbuj ponownie później.",
+    });
+  } catch (error) {
+    console.error("Batch fetch activity details error:", error);
+    res.status(500).json({ error: "Failed to batch fetch activity details" });
+  }
+};
+
+export const batchFetchActivityDetailsForRange = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const accessToken = await getStravaToken(req);
+
+    if (!accessToken) {
+      return res.status(401).json({
+        error: "Not authenticated with Strava",
+        requiresStravaLink: true,
+      });
+    }
+
+    const startDateRaw = req.body?.startDate ?? req.query?.startDate;
+    const endDateRaw = req.body?.endDate ?? req.query?.endDate;
+    const type = req.body?.type ?? req.query?.type;
+
+    const startDate = startDateRaw ? new Date(startDateRaw) : null;
+    const endDate = endDateRaw ? new Date(endDateRaw) : null;
+
+    if (!startDate || Number.isNaN(startDate.getTime()) || !endDate || Number.isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: "startDate and endDate are required" });
+    }
+
+    const limitRaw = req.body?.limit ?? req.query?.limit;
+    const limit = Math.max(1, Math.min(parseInt(limitRaw || 200), 300));
+
+    const where = {
+      userId,
+      source: "STRAVA",
+      startDate: { gte: startDate, lte: endDate },
+    };
+    if (type && type !== "all") where.type = type;
+
+    const activities = await prisma.activity.findMany({
+      where,
+      orderBy: { startDate: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        externalId: true,
+        name: true,
+        type: true,
+        distance: true,
+        averagePower: true,
+      },
+    });
+
+    let processed = 0;
+    let updated = 0;
+    let errors = 0;
+    let rateLimited = false;
+
+    for (const a of activities) {
+      processed++;
+      try {
+        await new Promise((r) => setTimeout(r, 250));
+
+        const detailedActivity = await stravaService.getActivity(accessToken, a.externalId);
+
+        await prisma.activity.update({
+          where: { id: a.id },
+          data: {
+            bestEfforts: detailedActivity.best_efforts || null,
+            laps: detailedActivity.laps || null,
+          },
+        });
+
+        const rawType = a.type?.toLowerCase() || "";
+        const isRunning =
+          rawType.includes("run") || rawType.includes("jog") || rawType.includes("workout");
+
+        if (isRunning && a.distance > 300) {
+          await calculatePaceDistances(a.id, userId, accessToken, a.externalId);
+        }
+
+        if (a.averagePower && a.averagePower > 0) {
+          await calculatePowerCurve(a.id, userId, a.type, accessToken, a.externalId);
+        }
+
+        updated++;
+      } catch (e) {
+        errors++;
+        if (e?.response?.status === 429) {
+          rateLimited = true;
+          break;
+        }
+      }
+    }
+
+    res.json({
+      message: "Batch activity details fetch (range) completed",
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      type: type || "all",
+      requested: limit,
+      found: activities.length,
+      processed,
+      updated,
+      errors,
+      rateLimited,
+      note:
+        "Pobieramy szczegóły i streamy z Stravy — możesz trafić w limit API. Wtedy spróbuj ponownie później.",
+    });
+  } catch (error) {
+    console.error("Batch fetch activity details for range error:", error);
+    res.status(500).json({ error: "Failed to batch fetch activity details for range" });
   }
 };

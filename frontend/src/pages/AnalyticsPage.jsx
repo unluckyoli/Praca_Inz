@@ -1,132 +1,105 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import GlobalFilters from "../components/GlobalFilters";
 import { useFilters } from "../context/FilterContext";
-import { analyticsAPI } from "../services/api";
+import Accordion from "../components/analytics/Accordion";
 import "./AnalyticsPage.css";
 
-const COLORS = [
-  "#667eea",
-  "#764ba2",
-  "#f093fb",
-  "#4facfe",
-  "#43e97b",
-  "#fa709a",
-];
+const CalendarHeatmapPanel = lazy(() =>
+  import("../components/analytics/panels/CalendarHeatmapPanel"),
+);
+const RampRatePanel = lazy(() => import("../components/analytics/panels/RampRatePanel"));
+const AerobicEfficiencyPanel = lazy(() =>
+  import("../components/analytics/panels/AerobicEfficiencyPanel"),
+);
+const TimePatternsPanel = lazy(() =>
+  import("../components/analytics/panels/TimePatternsPanel"),
+);
+const YearOverYearPanel = lazy(() =>
+  import("../components/analytics/panels/YearOverYearPanel"),
+);
 
 function AnalyticsPage() {
-  const [distribution, setDistribution] = useState([]);
-  const [weeklyStats, setWeeklyStats] = useState([]);
-  const [monthlyTrends, setMonthlyTrends] = useState([]);
-  const [intensityData, setIntensityData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
   const { dateRange, activityType } = useFilters();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [openId, setOpenId] = useState(searchParams.get("panel") || null);
+
+  const [cache, setCache] = useState({});
 
   useEffect(() => {
-    fetchAnalytics();
-  }, [dateRange, activityType]);
+    // keep state in sync with back/forward navigation
+    const p = searchParams.get("panel") || null;
+    // if URL points to a removed/unknown panel, close it
+    const allowed = new Set(["ramp", "ef", "time", "heatmap", "yoy"]);
+    setOpenId(p && allowed.has(p) ? p : null);
+  }, [searchParams]);
 
-  const fetchAnalytics = async () => {
-    try {
-      let weeks = 12;
-      let months = 6;
+  const panels = useMemo(() => ([
+    {
+      id: "ramp",
+      section: "Forma",
+      badges: ["Forma"],
+      title: "Bezpieczeństwo obciążenia (Ramp Rate)",
+      collapsedDescription: "Jak szybko rośnie obciążenie tydzień do tygodnia (ryzyko przeciążenia).",
+      requirements: [],
+      Component: RampRatePanel,
+    },
+    {
+      id: "ef",
+      section: "Insights",
+      badges: ["Insights"],
+      title: "Efektywność aerobowa (tempo vs tętno)",
+      collapsedDescription: "Czy biegasz szybciej przy tym samym tętnie? (EF trend).",
+      requirements: ["HR"],
+      Component: AerobicEfficiencyPanel,
+    },
+    {
+      id: "time",
+      section: "Insights",
+      badges: ["Insights"],
+      title: "Kiedy trenujesz najlepiej (wzorce czasowe)",
+      collapsedDescription: "Godziny i dni tygodnia: częstotliwość i jakość (speed/EF/load).",
+      requirements: [],
+      Component: TimePatternsPanel,
+    },
+    {
+      id: "heatmap",
+      section: "Analiza",
+      badges: ["Analiza"],
+      title: "Kalendarz treningów (heatmapa)",
+      collapsedDescription: "Systematyczność i bodziec dnia w stylu GitHub.",
+      requirements: [],
+      Component: CalendarHeatmapPanel,
+    },
+    {
+      id: "yoy",
+      section: "Analiza",
+      badges: ["Analiza"],
+      title: "Rok do roku (porównanie sezonów)",
+      collapsedDescription: "Overlay miesięczny: ten rok vs poprzedni (km/czas/load).",
+      requirements: [],
+      Component: YearOverYearPanel,
+    },
+  ]), []);
 
-      if (dateRange.start && dateRange.end) {
-        const daysDiff = Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24));
-        weeks = Math.max(1, Math.ceil(daysDiff / 7));
-        months = Math.max(1, Math.ceil(daysDiff / 30));
-      }
+  const grouped = useMemo(() => {
+    const map = new Map([["Forma", []], ["Insights", []], ["Analiza", []]]);
+    panels.forEach((p) => map.get(p.section).push(p));
+    return map;
+  }, [panels]);
 
-      const params = {};
-      if (activityType !== "all") {
-        params.type = activityType;
-      }
-
-      const [dist, weekly, monthly, intensity] = await Promise.all([
-        analyticsAPI.getDistribution(params),
-        analyticsAPI.getWeeklyStats({ ...params, weeks }),
-        analyticsAPI.getMonthlyTrends({ ...params, months }),
-        analyticsAPI.getIntensityDistribution(params),
-      ]);
-
-      setDistribution(
-        dist.data.distribution.map((d) => ({
-          name: d.type,
-          value: Number(d.count),
-          distance: Number(d.total_distance) / 1000,
-        })),
-      );
-
-      setWeeklyStats(
-        weekly.data.weeklyStats
-          .map((w) => ({
-            week: new Date(w.week).toLocaleDateString("pl-PL", {
-              month: "short",
-              day: "numeric",
-            }),
-            activities: Number(w.activities_count),
-            distance: Number(w.total_distance) / 1000,
-            duration: Number(w.total_duration) / 3600,
-          }))
-          .reverse(),
-      );
-
-      setMonthlyTrends(
-        monthly.data.monthlyTrends.map((m) => ({
-          month: new Date(m.month).toLocaleDateString("pl-PL", {
-            month: "long",
-          }),
-          activities: Number(m.activities_count),
-          distance: Number(m.total_distance) / 1000,
-          avgDistance: Number(m.avg_distance) / 1000,
-        })),
-      );
-
-      setIntensityData(
-        intensity.data.intensityDistribution.map((i) => ({
-          name:
-            i.intensity === "LOW"
-              ? "Niska"
-              : i.intensity === "MEDIUM"
-                ? "Średnia"
-                : "Wysoka",
-          value: Number(i.count),
-        })),
-      );
-    } catch (error) {
-      if (error.response?.status === 401) {
-        navigate("/");
-      }
-      console.error("Fetch analytics error:", error);
-    } finally {
-      setLoading(false);
-    }
+  const toggle = (id) => {
+    setOpenId((prev) => {
+      const next = prev === id ? null : id;
+      const sp = new URLSearchParams(searchParams);
+      if (next) sp.set("panel", next);
+      else sp.delete("panel");
+      setSearchParams(sp, { replace: true });
+      return next;
+    });
   };
-
-  if (loading) {
-    return (
-      <Layout>
-        <div className="loading">Ładowanie analiz...</div>
-      </Layout>
-    );
-  }
 
   return (
     <Layout>
@@ -135,99 +108,30 @@ function AnalyticsPage() {
 
         <GlobalFilters showMetric={false} />
 
-        <div className="chart-section">
-          <h2>Rozkład typów aktywności</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={distribution}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {distribution.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="chart-section">
-          <h2>Statystyki tygodniowe (ostatnie 12 tygodni)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={weeklyStats}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="week" />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
-              <Legend />
-              <Bar
-                yAxisId="left"
-                dataKey="activities"
-                fill="#667eea"
-                name="Liczba treningów"
+        <div className="analytics-sections">
+          {Array.from(grouped.entries()).map(([sectionName, items]) => (
+            <div key={sectionName} className="analytics-section">
+              <h2 className="analytics-section-title">{sectionName}</h2>
+              <Accordion
+                items={items}
+                openId={openId}
+                onToggle={toggle}
+                renderBody={(item) => {
+                  const Comp = item.Component;
+                  return (
+                    <Suspense fallback={<div>Ładowanie modułu wykresu…</div>}>
+                      <Comp
+                        cache={cache}
+                        setCache={setCache}
+                        dateRange={dateRange}
+                        activityType={activityType}
+                      />
+                    </Suspense>
+                  );
+                }}
               />
-              <Bar
-                yAxisId="right"
-                dataKey="distance"
-                fill="#764ba2"
-                name="Dystans (km)"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="chart-section">
-          <h2>Trendy miesięczne</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyTrends}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="distance"
-                stroke="#667eea"
-                name="Całkowity dystans (km)"
-                strokeWidth={2}
-              />
-              <Line
-                type="monotone"
-                dataKey="avgDistance"
-                stroke="#f093fb"
-                name="Średni dystans (km)"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="chart-section">
-          <h2>Rozkład intensywności</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={intensityData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#43e97b" name="Liczba treningów" />
-            </BarChart>
-          </ResponsiveContainer>
+            </div>
+          ))}
         </div>
       </div>
     </Layout>

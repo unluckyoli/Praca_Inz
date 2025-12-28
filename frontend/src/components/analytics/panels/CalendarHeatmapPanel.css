@@ -1,0 +1,63 @@
+.hm-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.hm-control label {
+  display: block;
+  font-size: 0.85rem;
+  color: #374151;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.hm-control select {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: white;
+}
+
+.hm-hover {
+  font-size: 0.92rem;
+  color: #111827;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.hm-grid {
+  display: grid;
+  grid-template-columns: repeat(53, 10px);
+  grid-auto-rows: 10px;
+  gap: 3px;
+  /* we map days sequentially; this is a compact "density map" */
+}
+
+.hm-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.hm-cell.h0 { background: rgba(148, 163, 184, 0.20); }
+.hm-cell.h1 { background: rgba(99, 102, 241, 0.18); border-color: rgba(99, 102, 241, 0.22); }
+.hm-cell.h2 { background: rgba(99, 102, 241, 0.30); border-color: rgba(99, 102, 241, 0.30); }
+.hm-cell.h3 { background: rgba(79, 70, 229, 0.45); border-color: rgba(79, 70, 229, 0.38); }
+.hm-cell.h4 { background: rgba(67, 56, 202, 0.60); border-color: rgba(67, 56, 202, 0.45); }
+.hm-cell.h5 { background: rgba(49, 46, 129, 0.70); border-color: rgba(49, 46, 129, 0.50); }
+
+@media (max-width: 900px) {
+  .hm-grid {
+    grid-template-columns: repeat(26, 10px);
+  }
+}
+
+

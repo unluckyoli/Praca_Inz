@@ -15,6 +15,7 @@ import {
   Plus,
   Grid3x3,
   List,
+  Wand2,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import WorkoutModal from "../components/WorkoutModal";
@@ -31,6 +32,8 @@ function TrainingPlanDetailPage() {
   const [completingWorkout, setCompletingWorkout] = useState(null);
   const [syncingToCalendar, setSyncingToCalendar] = useState(false);
   const [calendarSyncMessage, setCalendarSyncMessage] = useState(null);
+  const [recomputeMsg, setRecomputeMsg] = useState(null);
+  const [recomputing, setRecomputing] = useState(false);
   const [showWorkoutModal, setShowWorkoutModal] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
   const [selectedWeek, setSelectedWeek] = useState(null);
@@ -112,11 +115,11 @@ function TrainingPlanDetailPage() {
     setCalendarSyncMessage(null);
 
     try {
-      const response = await trainingPlanAPI.syncToCalendar(planId);
+      const response = await trainingPlanAPI.syncToTasks(planId);
       
       setCalendarSyncMessage({
         type: 'success',
-        text: `✅ Zsynchronizowano ${response.data.totalEvents} treningów z Google Calendar!`,
+        text: `✅ Zsynchronizowano ${response.data.totalTasks} treningów do Google Tasks!`,
       });
       
       await fetchPlan();
@@ -125,9 +128,12 @@ function TrainingPlanDetailPage() {
     } catch (error) {
       console.error("Sync to calendar error:", error);
       
+      const code = error.response?.data?.code;
       if (error.response?.data?.requiresGoogleAuth) {
         const userConfirmed = window.confirm(
-          'Aby zsynchronizować plan z kalendarzem, musisz połączyć konto Google. Czy chcesz to zrobić teraz?'
+          code === "google_missing_refresh_token"
+            ? "Twoje połączenie Google jest niekompletne (brak refresh tokena).\n\nKliknij OK aby połączyć ponownie Google.\nJeśli problem wróci: wejdź w ustawienia konta Google i cofnij dostęp aplikacji, a potem połącz ponownie."
+            : "Aby zsynchronizować plan do Google Tasks, musisz połączyć konto Google (dostęp do Zadań). Czy chcesz to zrobić teraz?"
         );
         
         if (userConfirmed) {
@@ -138,20 +144,48 @@ function TrainingPlanDetailPage() {
             console.error('Google auth error:', authError);
             setCalendarSyncMessage({
               type: 'error',
-              text: 'Błąd podczas łączenia z Google Calendar',
+              text: 'Błąd podczas łączenia z Google',
             });
           }
         }
       } else {
         setCalendarSyncMessage({
           type: 'error',
-          text: error.response?.data?.error || 'Błąd podczas synchronizacji z kalendarzem',
+          text: error.response?.data?.error || 'Błąd podczas synchronizacji do Google Tasks',
         });
       }
       
       setTimeout(() => setCalendarSyncMessage(null), 5000);
     } finally {
       setSyncingToCalendar(false);
+    }
+  };
+
+  const handleRecomputeWorkouts = async () => {
+    const ok = window.confirm(
+      "Naprawić tytuły i metryki treningów na podstawie struktury (warmup/interwały/cooldown)?\n\n" +
+        "To przeliczy nazwę, dystans, czas i tempo z intervals.blocks dla treningów w tym planie.",
+    );
+    if (!ok) return;
+
+    setRecomputing(true);
+    setRecomputeMsg(null);
+    try {
+      const res = await trainingPlanAPI.recomputeWorkouts(planId);
+      setRecomputeMsg({
+        type: "success",
+        text: `✅ Przeliczono: ${res.data.updated}/${res.data.processed} (pominięto: ${res.data.skipped}, błędy: ${res.data.errors})`,
+      });
+      await fetchPlan();
+      setTimeout(() => setRecomputeMsg(null), 7000);
+    } catch (e) {
+      setRecomputeMsg({
+        type: "error",
+        text: e.response?.data?.error || "Błąd podczas przeliczania treningów",
+      });
+      setTimeout(() => setRecomputeMsg(null), 7000);
+    } finally {
+      setRecomputing(false);
     }
   };
 
@@ -374,19 +408,37 @@ function TrainingPlanDetailPage() {
             <p className="plan-goal">{plan.goal}</p>
           </div>
 
-          <button 
-            className="sync-calendar-btn"
-            onClick={handleSyncToCalendar}
-            disabled={syncingToCalendar}
-          >
-            <CalendarPlus size={20} />
-            {syncingToCalendar ? 'Synchronizacja...' : plan.syncedToCalendar ? 'Aktualizuj kalendarz' : 'Wyślij do kalendarza'}
-          </button>
+          <div className="plan-header-actions">
+            <button
+              className="recompute-btn"
+              onClick={handleRecomputeWorkouts}
+              disabled={recomputing}
+              title="Napraw tytuły i metryki treningów na podstawie struktury"
+            >
+              <Wand2 size={18} />
+              {recomputing ? "Przeliczam..." : "Napraw tytuły"}
+            </button>
+
+            <button 
+              className="sync-calendar-btn"
+              onClick={handleSyncToCalendar}
+              disabled={syncingToCalendar}
+            >
+              <CalendarPlus size={20} />
+              {syncingToCalendar ? 'Synchronizacja...' : plan.syncedToGoogleTasks ? 'Aktualizuj zadania' : 'Wyślij do zadań'}
+            </button>
+          </div>
         </div>
 
         {calendarSyncMessage && (
           <div className={`calendar-sync-message ${calendarSyncMessage.type}`}>
             {calendarSyncMessage.text}
+          </div>
+        )}
+
+        {recomputeMsg && (
+          <div className={`calendar-sync-message ${recomputeMsg.type}`}>
+            {recomputeMsg.text}
           </div>
         )}
 

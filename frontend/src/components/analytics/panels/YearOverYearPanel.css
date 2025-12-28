@@ -1,0 +1,56 @@
+.yoy-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.yoy-controls label {
+  font-weight: 700;
+  color: #374151;
+}
+
+.yoy-controls select {
+  margin-left: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: white;
+}
+
+.yoy-table {
+  margin-top: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.yoy-table-head,
+.yoy-table-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr 0.8fr;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.yoy-table-head {
+  font-weight: 800;
+  background: rgba(15, 23, 42, 0.04);
+  color: #111827;
+}
+
+.yoy-table-row {
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  color: #374151;
+}
+
+.yoy-table-row .pos {
+  color: #065f46;
+  font-weight: 800;
+}
+.yoy-table-row .neg {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+

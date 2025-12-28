@@ -636,3 +636,607 @@ export const compareActivities = async (req, res) => {
     res.status(500).json({ error: "Failed to compare activities" });
   }
 };
+
+// -----------------------------
+// New analytics endpoints (Stage 3)
+// -----------------------------
+
+const parseDateParam = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const isoDayKeyUTC = (date) => {
+  const d = new Date(date);
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+};
+
+// ISO week starts Monday (UTC)
+const isoWeekStartUTC = (date) => {
+  const d = new Date(date);
+  const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = utc.getUTCDay(); // 0..6 (Sun..Sat)
+  const diff = day === 0 ? -6 : 1 - day; // move to Monday
+  utc.setUTCDate(utc.getUTCDate() + diff);
+  utc.setUTCHours(0, 0, 0, 0);
+  return utc;
+};
+
+const clampInt = (v, min, max, fallback) => {
+  const n = parseInt(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+};
+
+const clampStrEnum = (v, allowed, fallback) => {
+  if (!v) return fallback;
+  return allowed.includes(v) ? v : fallback;
+};
+
+export const getCalendarHeatmap = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { type } = req.query;
+
+    const end = parseDateParam(req.query.endDate) || new Date();
+    const start =
+      parseDateParam(req.query.startDate) ||
+      (() => {
+        const d = new Date(end);
+        d.setDate(d.getDate() - 365);
+        return d;
+      })();
+
+    const where = {
+      userId,
+      startDate: { gte: start, lte: end },
+    };
+    if (type) where.type = type;
+
+    const activities = await prisma.activity.findMany({
+      where,
+      select: {
+        startDate: true,
+        duration: true,
+        distance: true,
+        elevationGain: true,
+        trainingLoad: true,
+        type: true,
+      },
+      orderBy: { startDate: "asc" },
+      take: 50000,
+    });
+
+    const byDay = new Map();
+    for (const a of activities) {
+      const key = isoDayKeyUTC(a.startDate);
+      if (!byDay.has(key)) {
+        byDay.set(key, {
+          date: key,
+          count: 0,
+          totalDuration: 0,
+          totalDistance: 0,
+          totalLoad: 0,
+        });
+      }
+      const row = byDay.get(key);
+      row.count += 1;
+      row.totalDuration += a.duration || 0;
+      row.totalDistance += a.distance || 0;
+      const load = computeTrainingLoad(a);
+      row.totalLoad += load || 0;
+    }
+
+    const days = Array.from(byDay.values());
+    res.json({
+      startDate: isoDayKeyUTC(start),
+      endDate: isoDayKeyUTC(end),
+      days,
+    });
+  } catch (error) {
+    console.error("Get calendar heatmap error:", error);
+    res.status(500).json({ error: "Failed to fetch calendar heatmap" });
+  }
+};
+
+export const getRampRate = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const weeks = clampInt(req.query.weeks, 4, 104, 26);
+    const { type } = req.query;
+
+    const end = parseDateParam(req.query.endDate) || new Date();
+    const start = (() => {
+      const d = new Date(end);
+      d.setDate(d.getDate() - weeks * 7);
+      return d;
+    })();
+
+    const where = {
+      userId,
+      startDate: { gte: start, lte: end },
+    };
+    if (type) where.type = type;
+
+    const activities = await prisma.activity.findMany({
+      where,
+      select: {
+        startDate: true,
+        duration: true,
+        distance: true,
+        elevationGain: true,
+        trainingLoad: true,
+      },
+      orderBy: { startDate: "asc" },
+      take: 50000,
+    });
+
+    const byWeek = new Map();
+    for (const a of activities) {
+      const ws = isoWeekStartUTC(a.startDate);
+      const key = ws.toISOString().slice(0, 10);
+      if (!byWeek.has(key)) {
+        byWeek.set(key, {
+          weekStart: ws,
+          weekKey: key,
+          activitiesCount: 0,
+          totalLoad: 0,
+          totalDuration: 0,
+          totalDistance: 0,
+        });
+      }
+      const row = byWeek.get(key);
+      row.activitiesCount += 1;
+      row.totalDuration += a.duration || 0;
+      row.totalDistance += a.distance || 0;
+      row.totalLoad += computeTrainingLoad(a) || 0;
+    }
+
+    const weeksArr = Array.from(byWeek.values())
+      .sort((a, b) => a.weekStart - b.weekStart)
+      .map((w) => ({
+        weekStart: w.weekStart,
+        weekKey: w.weekKey,
+        activitiesCount: w.activitiesCount,
+        totalLoad: Math.round(w.totalLoad),
+        totalDuration: w.totalDuration,
+        totalDistance: w.totalDistance,
+      }));
+
+    const enriched = weeksArr.map((w, idx) => {
+      const prev = idx > 0 ? weeksArr[idx - 1] : null;
+      const rampRatePct =
+        prev && prev.totalLoad > 0
+          ? round(((w.totalLoad - prev.totalLoad) / prev.totalLoad) * 100, 1)
+          : null;
+      return { ...w, rampRatePct };
+    });
+
+    res.json({ weeks: enriched });
+  } catch (error) {
+    console.error("Get ramp rate error:", error);
+    res.status(500).json({ error: "Failed to fetch ramp rate" });
+  }
+};
+
+export const getAerobicEfficiency = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { type } = req.query;
+    const mode = clampStrEnum(req.query.mode, ["all", "easy"], "all");
+    const maxHr = clampInt(req.query.maxHr, 90, 200, 150);
+
+    const end = parseDateParam(req.query.endDate) || new Date();
+    const start =
+      parseDateParam(req.query.startDate) ||
+      (() => {
+        const d = new Date(end);
+        d.setDate(d.getDate() - 180);
+        return d;
+      })();
+
+    const where = {
+      userId,
+      startDate: { gte: start, lte: end },
+      averageSpeed: { not: null },
+      averageHeartRate: { not: null },
+    };
+    if (type) where.type = type;
+
+    const activities = await prisma.activity.findMany({
+      where,
+      select: {
+        startDate: true,
+        type: true,
+        distance: true,
+        duration: true,
+        averageSpeed: true,
+        averageHeartRate: true,
+        elevationGain: true,
+        trainingLoad: true,
+      },
+      orderBy: { startDate: "asc" },
+      take: 5000,
+    });
+
+    const points = [];
+    for (const a of activities) {
+      const hr = a.averageHeartRate;
+      const speed = a.averageSpeed; // m/s
+      if (!hr || !speed || hr <= 0 || speed <= 0) continue;
+      if (mode === "easy" && hr > maxHr) continue;
+      const speedKmh = speed * 3.6;
+      const ef = speedKmh / hr;
+      if (!Number.isFinite(ef) || ef <= 0) continue;
+      points.push({
+        date: a.startDate,
+        ef: round(ef, 4),
+        avgSpeedKmh: round(speedKmh, 2),
+        avgHr: hr,
+        type: a.type,
+        distance: a.distance,
+        duration: a.duration,
+        load: computeTrainingLoad(a),
+      });
+    }
+
+    res.json({
+      startDate: isoDayKeyUTC(start),
+      endDate: isoDayKeyUTC(end),
+      mode,
+      maxHr,
+      points,
+    });
+  } catch (error) {
+    console.error("Get aerobic efficiency error:", error);
+    res.status(500).json({ error: "Failed to fetch aerobic efficiency" });
+  }
+};
+
+export const getTimePatterns = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { type } = req.query;
+    const metric = clampStrEnum(req.query.metric, ["count", "speed", "ef", "load"], "count");
+    // JS getTimezoneOffset() gives minutes behind UTC (e.g. CET winter is -60? actually +60 => -60?),
+    // but we only need a consistent shift from client; frontend passes its getTimezoneOffset().
+    const tzOffsetMinutes = Number.isFinite(Number(req.query.tzOffsetMinutes))
+      ? Number(req.query.tzOffsetMinutes)
+      : 0;
+
+    const end = parseDateParam(req.query.endDate) || new Date();
+    const start =
+      parseDateParam(req.query.startDate) ||
+      (() => {
+        const d = new Date(end);
+        d.setDate(d.getDate() - 180);
+        return d;
+      })();
+
+    const where = {
+      userId,
+      startDate: { gte: start, lte: end },
+    };
+    if (type) where.type = type;
+
+    const activities = await prisma.activity.findMany({
+      where,
+      select: {
+        startDate: true,
+        averageSpeed: true,
+        averageHeartRate: true,
+        trainingLoad: true,
+        distance: true,
+        duration: true,
+        elevationGain: true,
+      },
+      orderBy: { startDate: "asc" },
+      take: 50000,
+    });
+
+    const byHour = Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      count: 0,
+      total: 0,
+      samples: 0,
+    }));
+
+    // dayOfWeek: 0..6 (Mon..Sun) for UX
+    const heatmap = Array.from({ length: 7 }, (_, dow) => ({
+      dow,
+      hours: Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 })),
+    }));
+
+    const dowMap = (utcDay) => (utcDay === 0 ? 6 : utcDay - 1); // Sun->6, Mon->0 ...
+
+    for (const a of activities) {
+      // Convert to client-local time using tzOffsetMinutes (same semantics as Date.getTimezoneOffset()).
+      // local = utc - offsetMinutes
+      const shifted = new Date(a.startDate.getTime() - tzOffsetMinutes * 60 * 1000);
+      const hour = shifted.getUTCHours();
+      const dow = dowMap(shifted.getUTCDay());
+      byHour[hour].count += 1;
+      heatmap[dow].hours[hour].count += 1;
+
+      if (metric === "speed") {
+        const speed = a.averageSpeed;
+        if (speed && speed > 0) {
+          byHour[hour].total += speed * 3.6;
+          byHour[hour].samples += 1;
+        }
+      } else if (metric === "ef") {
+        const speed = a.averageSpeed;
+        const hr = a.averageHeartRate;
+        if (speed && hr && speed > 0 && hr > 0) {
+          byHour[hour].total += (speed * 3.6) / hr;
+          byHour[hour].samples += 1;
+        }
+      } else if (metric === "load") {
+        const load = computeTrainingLoad(a);
+        if (load != null) {
+          byHour[hour].total += load;
+          byHour[hour].samples += 1;
+        }
+      }
+    }
+
+    const byHourOut = byHour.map((h) => ({
+      hour: h.hour,
+      count: h.count,
+      samples: h.samples,
+      value:
+        metric === "count"
+          ? h.count
+          : h.samples > 0
+            ? round(h.total / h.samples, metric === "ef" ? 4 : 2)
+            : null,
+    }));
+
+    res.json({
+      startDate: isoDayKeyUTC(start),
+      endDate: isoDayKeyUTC(end),
+      metric,
+      timezoneNote:
+        tzOffsetMinutes !== 0
+          ? `Godziny przeliczone na lokalny czas klienta (offset: ${tzOffsetMinutes} min)`
+          : "UTC (start_date); brak start_date_local w bazie",
+      byHour: byHourOut,
+      heatmap,
+    });
+  } catch (error) {
+    console.error("Get time patterns error:", error);
+    res.status(500).json({ error: "Failed to fetch time patterns" });
+  }
+};
+
+export const getYearOverYear = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const metric = clampStrEnum(req.query.metric, ["distance", "duration", "load"], "distance");
+    const year = clampInt(req.query.year, 2010, 2100, new Date().getUTCFullYear());
+    const compareTo = clampInt(req.query.compareTo, 2010, 2100, year - 1);
+    const { type } = req.query;
+
+    const buildYearRange = (y) => ({
+      start: new Date(Date.UTC(y, 0, 1, 0, 0, 0, 0)),
+      end: new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999)),
+    });
+
+    const loadYear = async (y) => {
+      const { start, end } = buildYearRange(y);
+      const where = {
+        userId,
+        startDate: { gte: start, lte: end },
+      };
+      if (type) where.type = type;
+
+      const acts = await prisma.activity.findMany({
+        where,
+        select: {
+          startDate: true,
+          distance: true,
+          duration: true,
+          elevationGain: true,
+          trainingLoad: true,
+        },
+        orderBy: { startDate: "asc" },
+        take: 50000,
+      });
+
+      const months = Array.from({ length: 12 }, (_, m) => ({
+        month: m + 1,
+        value: 0,
+      }));
+
+      for (const a of acts) {
+        const m = a.startDate.getUTCMonth(); // 0..11
+        if (metric === "distance") months[m].value += (a.distance || 0) / 1000;
+        else if (metric === "duration") months[m].value += (a.duration || 0) / 3600;
+        else months[m].value += computeTrainingLoad(a) || 0;
+      }
+
+      return months.map((x) => ({
+        ...x,
+        value: round(x.value, metric === "load" ? 0 : 2),
+      }));
+    };
+
+    const [current, previous] = await Promise.all([loadYear(year), loadYear(compareTo)]);
+
+    const combined = current.map((c, idx) => {
+      const p = previous[idx];
+      const deltaPct =
+        p.value && p.value > 0 ? round(((c.value - p.value) / p.value) * 100, 1) : null;
+      return {
+        month: c.month,
+        current: c.value,
+        previous: p.value,
+        deltaPct,
+      };
+    });
+
+    res.json({ metric, year, compareTo, months: combined });
+  } catch (error) {
+    console.error("Get year over year error:", error);
+    res.status(500).json({ error: "Failed to fetch year-over-year" });
+  }
+};
+
+export const getPerformanceCurve = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const mode = clampStrEnum(req.query.mode, ["power", "pace"], "pace");
+    const { type } = req.query;
+
+    const end = parseDateParam(req.query.endDate) || new Date();
+    const start =
+      parseDateParam(req.query.startDate) ||
+      (() => {
+        const d = new Date(end);
+        d.setDate(d.getDate() - 365);
+        return d;
+      })();
+
+    if (mode === "power") {
+      const where = {
+        userId,
+        activity: { startDate: { gte: start, lte: end } },
+      };
+      if (type) where.activity.type = type;
+
+      const rows = await prisma.powerCurve.findMany({
+        where,
+        select: {
+          sec5: true,
+          sec30: true,
+          min1: true,
+          min2: true,
+          min5: true,
+          min10: true,
+          min20: true,
+          min60: true,
+        },
+        take: 5000,
+      });
+
+      const buckets = [
+        ["5s", "sec5"],
+        ["30s", "sec30"],
+        ["1min", "min1"],
+        ["2min", "min2"],
+        ["5min", "min5"],
+        ["10min", "min10"],
+        ["20min", "min20"],
+        ["60min", "min60"],
+      ];
+
+      const points = buckets.map(([label, key]) => {
+        let best = null;
+        for (const r of rows) {
+          const v = r[key];
+          if (typeof v === "number" && v > 0) best = best == null ? v : Math.max(best, v);
+        }
+        return { label, value: best != null ? Math.round(best) : null };
+      });
+
+      return res.json({
+        mode,
+        unit: "W",
+        startDate: isoDayKeyUTC(start),
+        endDate: isoDayKeyUTC(end),
+        points,
+      });
+    }
+
+    // pace mode
+    const where = {
+      userId,
+      activity: { startDate: { gte: start, lte: end } },
+    };
+    if (type) where.activity.type = type;
+
+    const rows = await prisma.paceDistance.findMany({
+      where,
+      select: {
+        km1: true,
+        km5: true,
+        km10: true,
+        km21: true,
+        km42: true,
+      },
+      take: 50000,
+    });
+
+    const buckets = [
+      ["1 km", "km1"],
+      ["5 km", "km5"],
+      ["10 km", "km10"],
+      ["21.1 km", "km21"],
+      ["42.2 km", "km42"],
+    ];
+
+    const bestFromPaceDistance = (key) => {
+      let best = null;
+      for (const r of rows) {
+        const v = r[key];
+        if (typeof v === "number" && v > 0) best = best == null ? v : Math.min(best, v);
+      }
+      return best != null ? round(best, 2) : null;
+    };
+
+    // Fallback: if PaceDistance is missing (user didn't fetch details), use Strava bestEfforts JSON if present.
+    // bestEfforts contains objects with { distance, elapsed_time } (seconds) for best segments inside an activity.
+    const bestFromBestEfforts = async (targetMeters) => {
+      const acts = await prisma.activity.findMany({
+        where: {
+          userId,
+          startDate: { gte: start, lte: end },
+          ...(type ? { type } : {}),
+          bestEfforts: { not: null },
+        },
+        select: { bestEfforts: true },
+        take: 5000,
+      });
+
+      let bestPaceMinPerKm = null;
+      for (const a of acts) {
+        const arr = Array.isArray(a.bestEfforts) ? a.bestEfforts : null;
+        if (!arr) continue;
+        for (const e of arr) {
+          const dist = Number(e?.distance);
+          const t = Number(e?.elapsed_time);
+          if (!Number.isFinite(dist) || !Number.isFinite(t) || dist <= 0 || t <= 0) continue;
+          // accept within 2% tolerance
+          if (Math.abs(dist - targetMeters) / targetMeters > 0.02) continue;
+          const pace = (t / 60) / (dist / 1000);
+          if (!Number.isFinite(pace) || pace <= 0 || pace > 20) continue;
+          bestPaceMinPerKm = bestPaceMinPerKm == null ? pace : Math.min(bestPaceMinPerKm, pace);
+        }
+      }
+      return bestPaceMinPerKm != null ? round(bestPaceMinPerKm, 2) : null;
+    };
+
+    const points = [];
+    for (const [label, key] of buckets) {
+      let value = bestFromPaceDistance(key);
+      if (value == null) {
+        const meters =
+          key === "km1" ? 1000 : key === "km5" ? 5000 : key === "km10" ? 10000 : key === "km21" ? 21097.5 : 42195;
+        value = await bestFromBestEfforts(meters);
+      }
+      points.push({ label, value });
+    }
+
+    res.json({
+      mode,
+      unit: "min/km",
+      startDate: isoDayKeyUTC(start),
+      endDate: isoDayKeyUTC(end),
+      points,
+    });
+  } catch (error) {
+    console.error("Get performance curve error:", error);
+    res.status(500).json({ error: "Failed to fetch performance curve" });
+  }
+};

@@ -37,12 +37,26 @@ function GlobalFilters({
   };
 
   const handleStartDateChange = (e) => {
-    const newStart = e.target.value ? new Date(e.target.value) : null;
+    // normalize to start of day (local) to avoid off-by-one when converting to ISO/UTC
+    const newStart = e.target.value
+      ? (() => {
+          const d = new Date(e.target.value);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        })()
+      : null;
     setDateRange({ ...dateRange, start: newStart });
   };
 
   const handleEndDateChange = (e) => {
-    const newEnd = e.target.value ? new Date(e.target.value) : null;
+    // normalize to end of day (local) to include the whole day in API filters
+    const newEnd = e.target.value
+      ? (() => {
+          const d = new Date(e.target.value);
+          d.setHours(23, 59, 59, 999);
+          return d;
+        })()
+      : null;
     setDateRange({ ...dateRange, end: newEnd });
   };
 

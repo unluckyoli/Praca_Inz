@@ -14,9 +14,11 @@ import {
   getPlanById,
   getSessionById,
   syncPlanToCalendar,
+  syncPlanToGoogleTasks,
   updateWorkout,
   addWorkoutToPlan,
   deleteWorkout,
+  recomputePlanWorkouts,
 } from "../controllers/trainingPlan.controller.js";
 
 const router = express.Router();
@@ -28,11 +30,13 @@ router.get("/my-plans", authenticate, getUserTrainingPlans);
 router.get("/my-plans/:planId", authenticate, getTrainingPlanById);
 router.patch("/workout/:workoutId/complete", authenticate, completeWorkout);
 router.patch("/workout/:workoutId", authenticate, updateWorkout);
+router.post("/my-plans/:planId/recompute-workouts", authenticate, recomputePlanWorkouts);
 router.delete("/workout/:workoutId", authenticate, deleteWorkout);
 router.post("/my-plans/:planId/workout", authenticate, addWorkoutToPlan);
 router.patch("/my-plans/:planId/status", authenticate, updatePlanStatus);
 router.delete("/my-plans/:planId", authenticate, deleteTrainingPlan);
 router.post("/my-plans/:id/sync-to-calendar", authenticate, syncPlanToCalendar);
+router.post("/my-plans/:id/sync-to-tasks", authenticate, syncPlanToGoogleTasks);
 
 router.get("/recommend", authenticate, getRecommendedPlan);
 router.get("/templates", authenticate, getPlanTemplates);

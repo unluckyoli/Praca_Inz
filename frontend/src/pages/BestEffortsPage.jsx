@@ -11,6 +11,9 @@ import "./BestEffortsPage.css";
 function BestEffortsPage() {
   const [bestEfforts, setBestEfforts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filling, setFilling] = useState(false);
+  const [fillLimit, setFillLimit] = useState(200);
+  const [fillMsg, setFillMsg] = useState(null);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -55,6 +58,40 @@ function BestEffortsPage() {
     }
   };
 
+  const fillDetailsForPeriod = async () => {
+    try {
+      setFilling(true);
+      setFillMsg(null);
+
+      const payload = {
+        limit: Math.max(1, Math.min(fillLimit, 300)),
+      };
+      if (activityType !== "all") payload.type = activityType;
+      if (dateRange.start) payload.startDate = dateRange.start.toISOString();
+      if (dateRange.end) payload.endDate = dateRange.end.toISOString();
+
+      if (!payload.startDate || !payload.endDate) {
+        setFillMsg("Ustaw zakres dat (OD/DO), aby uzupełnić rekordy dla okresu.");
+        return;
+      }
+
+      const res = await activitiesAPI.batchFetchDetailsRange(payload);
+      setFillMsg(
+        `Uzupełniono szczegóły dla okresu: ${res.data.updated}/${res.data.processed} (błędy: ${res.data.errors})` +
+          (res.data.rateLimited ? " — trafiono limit API Strava, spróbuj później." : ""),
+      );
+
+      await fetchBestEfforts();
+    } catch (error) {
+      if (error.response?.status === 401) {
+        navigate("/");
+      }
+      setFillMsg(error.response?.data?.error || "Nie udało się uzupełnić rekordów dla okresu");
+    } finally {
+      setFilling(false);
+    }
+  };
+
   const handleActivityClick = async (activityId) => {
     try {
       const res = await activitiesAPI.getActivityById(activityId);
@@ -77,9 +114,14 @@ function BestEffortsPage() {
   };
 
   const formatEffortTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+    if (seconds == null) return "-";
+    const total = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    if (m > 0) return `${m}:${s.toString().padStart(2, "0")}`;
+    return `${s}s`;
   };
 
   const formatPace = (seconds, meters) => {
@@ -112,6 +154,39 @@ function BestEffortsPage() {
         </div>
 
         <GlobalFilters showMetric={false} />
+
+        <div className="fill-card">
+          <div className="fill-top">
+            <div className="fill-title">Uzupełnij rekordy dla okresu</div>
+            <div className="fill-sub">
+              Pobieramy szczegóły i streamy ze Stravy dla aktywności w wybranym okresie (limit API jest możliwy).
+            </div>
+          </div>
+
+          <div className="fill-controls">
+            <div className="fill-field">
+              <div className="fill-label">Max aktywności</div>
+              <input
+                className="fill-input"
+                type="number"
+                min="1"
+                max="300"
+                value={fillLimit}
+                onChange={(e) => setFillLimit(Number(e.target.value))}
+              />
+            </div>
+
+            <button className="fill-btn" disabled={filling} onClick={fillDetailsForPeriod}>
+              {filling ? "Uzupełniam…" : "Uzupełnij"}
+            </button>
+          </div>
+
+          {fillMsg && (
+            <div className={`fill-msg ${fillMsg.includes("limit") ? "warn" : "ok"}`}>
+              {fillMsg}
+            </div>
+          )}
+        </div>
 
         {bestEfforts.length === 0 ? (
           <div className="no-data-container">

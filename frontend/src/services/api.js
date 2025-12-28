@@ -135,6 +135,8 @@ export const activitiesAPI = {
   recalculatePaceData: () => api.post("/activities/recalculate-pace"),
   syncBestEfforts: () => api.post("/activities/sync-best-efforts"),
   fetchActivityDetails: (id) => api.post(`/activities/${id}/fetch-details`),
+  batchFetchDetails: (limit) => api.post("/activities/batch-fetch-details", { limit }),
+  batchFetchDetailsRange: (payload) => api.post("/activities/batch-fetch-details-range", payload),
 };
 
 export const analyticsAPI = {
@@ -147,6 +149,15 @@ export const analyticsAPI = {
     api.get("/analytics/progress", { params: { metric, period } }),
   compareActivities: (firstId, secondId) =>
     api.get("/analytics/compare", { params: { firstId, secondId } }),
+  getFitnessMetrics: (params) => api.get("/analytics/fitness-metrics", { params }),
+
+  // Stage 3 analytics (accordion panels)
+  getCalendarHeatmap: (params) => api.get("/analytics/calendar-heatmap", { params }),
+  getRampRate: (params) => api.get("/analytics/ramp-rate", { params }),
+  getAerobicEfficiency: (params) => api.get("/analytics/aerobic-efficiency", { params }),
+  getTimePatterns: (params) => api.get("/analytics/time-patterns", { params }),
+  getYearOverYear: (params) => api.get("/analytics/year-over-year", { params }),
+  getPerformanceCurve: (params) => api.get("/analytics/performance-curve", { params }),
 };
 
 export const dataAPI = {
@@ -236,6 +247,8 @@ export const trainingPlanAPI = {
   updatePlanStatus: (planId, status) => api.patch(`/training-plan/my-plans/${planId}/status`, { status }),
   deletePlan: (planId) => api.delete(`/training-plan/my-plans/${planId}`),
   syncToCalendar: (planId) => api.post(`/training-plan/my-plans/${planId}/sync-to-calendar`),
+  syncToTasks: (planId) => api.post(`/training-plan/my-plans/${planId}/sync-to-tasks`),
+  recomputeWorkouts: (planId) => api.post(`/training-plan/my-plans/${planId}/recompute-workouts`),
 };
 
 

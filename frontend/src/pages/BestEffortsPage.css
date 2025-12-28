@@ -28,6 +28,113 @@
   margin: 0.5rem 0 0 0;
 }
 
+.fill-card {
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.06);
+}
+
+.fill-top {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.fill-title {
+  font-weight: 800;
+  color: #111827;
+  font-size: 1rem;
+}
+
+.fill-sub {
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.fill-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fill-field {
+  display: grid;
+  gap: 6px;
+}
+
+.fill-label {
+  font-size: 0.82rem;
+  color: #374151;
+  font-weight: 700;
+}
+
+.fill-input {
+  width: 120px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: white;
+  outline: none;
+}
+
+.fill-input:focus {
+  border-color: rgba(102, 126, 234, 0.55);
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+}
+
+.fill-btn {
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(102, 126, 234, 0.25);
+  background: rgba(102, 126, 234, 0.14);
+  color: #3730a3;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.05s ease;
+}
+
+.fill-btn:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.20);
+  border-color: rgba(102, 126, 234, 0.35);
+}
+
+.fill-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.fill-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fill-msg {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  color: #111827;
+  font-size: 0.95rem;
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.fill-msg.ok {
+  background: rgba(16, 185, 129, 0.10);
+  border-color: rgba(16, 185, 129, 0.22);
+  color: #065f46;
+}
+
+.fill-msg.warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #92400e;
+}
+
 .efforts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -180,6 +287,10 @@
 @media (max-width: 768px) {
   .best-efforts-page {
     padding: 1rem;
+  }
+
+  .fill-input {
+    width: 100%;
   }
 
   .efforts-grid {
