@@ -1286,9 +1286,13 @@ const toDueIsoForDate = (date) => {
 export const syncPlanToGoogleTasks = async (req, res) => {
   try {
     const { id: planId } = req.params;
+    const { startDate: customStartDate } = req.body;
     const userId = getUserId(req);
 
     console.log(`[Sync Tasks] Starting sync for plan ${planId}...`);
+    if (customStartDate) {
+      console.log(`[Sync Tasks] Custom start date provided: ${customStartDate}`);
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -1303,7 +1307,7 @@ export const syncPlanToGoogleTasks = async (req, res) => {
       });
     }
 
-    const tasksScope = "https://www.googleapis.com/auth/calendar";
+    const tasksScope = "https://www.googleapis.com/auth/tasks";
     if (!String(user.googleScopes || "").includes(tasksScope)) {
       return res.status(403).json({
         error: "Google Tasks permission not granted. Reconnect Google and allow Tasks access.",
@@ -1360,7 +1364,11 @@ export const syncPlanToGoogleTasks = async (req, res) => {
     const errors = [];
 
     let startDate;
-    if (plan.targetRaceDate) {
+    if (customStartDate) {
+      // Użyj daty podanej przez użytkownika
+      startDate = new Date(customStartDate);
+      console.log(`[Sync Tasks] Using custom start date: ${startDate.toISOString()}`);
+    } else if (plan.targetRaceDate) {
       startDate = new Date(plan.targetRaceDate);
       startDate.setDate(startDate.getDate() - plan.weeksCount * 7);
     } else {
@@ -1884,11 +1892,11 @@ export const getSessionById = async (req, res) => {
 
 export const syncPlanToCalendar = async (req, res) => {
   try {
-    // Sync to Google Calendar (events)
-    return await syncPlanToCalendarLegacy(req, res);
+    // Sync to Google Tasks (not Calendar events)
+    return await syncPlanToGoogleTasks(req, res);
   } catch (error) {
-    console.error("Error syncing plan to calendar:", error);
-    return res.status(500).json({ error: "Failed to sync training plan to calendar" });
+    console.error("Error syncing plan to tasks:", error);
+    return res.status(500).json({ error: "Failed to sync training plan to tasks" });
   }
 };
 
