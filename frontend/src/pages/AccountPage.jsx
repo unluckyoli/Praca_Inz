@@ -8,6 +8,7 @@ import {
   Mail,
   Calendar,
   CheckCircle,
+  Edit2,
 } from "lucide-react";
 import Layout from "../components/Layout";
 import { useAuth } from "../hooks/useAuth";
@@ -21,6 +22,12 @@ function AccountPage() {
   const [linking, setLinking] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: ''
+  });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -153,6 +160,31 @@ function AccountPage() {
     }
   };
 
+  const handleEditProfile = () => {
+    setProfileForm({
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      email: user?.email || ''
+    });
+    setEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const response = await authAPI.updateProfile(profileForm);
+      await fetchUserData();
+      setEditingProfile(false);
+      alert('✅ Profil został zaktualizowany pomyślnie!');
+    } catch (error) {
+      console.error('Update profile error:', error);
+      alert('Błąd podczas aktualizacji profilu: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleCancelEditProfile = () => {
+    setEditingProfile(false);
+  };
+
   if (authLoading || loading) {
     return (
       <Layout>
@@ -194,49 +226,156 @@ function AccountPage() {
 
         <div className="account-content">
           <div className="account-section">
-            <h2>Informacje o koncie</h2>
-            <div className="info-grid">
-              {user?.email && (
-                <div className="info-item">
-                  <Mail size={20} />
-                  <div>
-                    <label>Email</label>
-                    <p>{user.email}</p>
-                  </div>
-                </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h2>Informacje o koncie</h2>
+              {!editingProfile && (
+                <button
+                  onClick={handleEditProfile}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Edit2 size={16} />
+                  Edytuj profil
+                </button>
               )}
-              {user?.isStravaEmail && (
-                <div className="info-item">
-                  <Mail size={20} />
-                  <div>
-                    <label>Email</label>
-                    <p className="text-muted">Zalogowano przez Strava</p>
-                  </div>
+            </div>
+
+            {editingProfile ? (
+              <div style={{ padding: '20px', background: '#f9fafb', borderRadius: '8px' }}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>Imię</label>
+                  <input
+                    type="text"
+                    value={profileForm.firstName}
+                    onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
                 </div>
-              )}
-              {user?.firstName && (
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>Nazwisko</label>
+                  <input
+                    type="text"
+                    value={profileForm.lastName}
+                    onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                {!user?.isStravaEmail && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>Email</label>
+                    <input
+                      type="email"
+                      value={profileForm.email}
+                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                  <button
+                    onClick={handleSaveProfile}
+                    style={{
+                      padding: '10px 20px',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Zapisz zmiany
+                  </button>
+                  <button
+                    onClick={handleCancelEditProfile}
+                    style={{
+                      padding: '10px 20px',
+                      background: '#6b7280',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Anuluj
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="info-grid">
+                {user?.email && (
+                  <div className="info-item">
+                    <Mail size={20} />
+                    <div>
+                      <label>Email</label>
+                      <p>{user.email}</p>
+                    </div>
+                  </div>
+                )}
+                {user?.isStravaEmail && (
+                  <div className="info-item">
+                    <Mail size={20} />
+                    <div>
+                      <label>Email</label>
+                      <p className="text-muted">Zalogowano przez Strava</p>
+                    </div>
+                  </div>
+                )}
+                {user?.firstName && (
+                  <div className="info-item">
+                    <User size={20} />
+                    <div>
+                      <label>Imię i nazwisko</label>
+                      <p>
+                        {user.firstName} {user.lastName}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="info-item">
-                  <User size={20} />
+                  <Calendar size={20} />
                   <div>
-                    <label>Imię i nazwisko</label>
+                    <label>Data utworzenia</label>
                     <p>
-                      {user.firstName} {user.lastName}
+                      {new Date(user?.createdAt || Date.now()).toLocaleDateString(
+                        "pl-PL",
+                      )}
                     </p>
                   </div>
                 </div>
-              )}
-              <div className="info-item">
-                <Calendar size={20} />
-                <div>
-                  <label>Data utworzenia</label>
-                  <p>
-                    {new Date(user?.createdAt || Date.now()).toLocaleDateString(
-                      "pl-PL",
-                    )}
-                  </p>
-                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="account-section">

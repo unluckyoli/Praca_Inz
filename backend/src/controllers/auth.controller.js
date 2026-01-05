@@ -336,6 +336,72 @@ export const getCurrentUser = async (req, res) => {
   }
 };
 
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { firstName, lastName, email } = req.body;
+
+    const updateData = {};
+    
+    if (firstName !== undefined) {
+      updateData.firstName = firstName.trim();
+    }
+    
+    if (lastName !== undefined) {
+      updateData.lastName = lastName.trim();
+    }
+    
+    if (email !== undefined) {
+      const trimmedEmail = email.trim();
+      
+      // Sprawdź czy email nie jest już zajęty przez innego użytkownika
+      if (trimmedEmail) {
+        const existingUser = await prisma.user.findFirst({
+          where: {
+            email: trimmedEmail,
+            id: { not: userId }
+          }
+        });
+        
+        if (existingUser) {
+          return res.status(400).json({ error: "Ten adres email jest już używany przez inne konto" });
+        }
+        
+        updateData.email = trimmedEmail;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "Brak danych do aktualizacji" });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      include: {
+        userStats: true,
+      },
+    });
+
+    const isStravaEmail = updatedUser.email && updatedUser.email.includes('@strava.local');
+    const displayEmail = isStravaEmail ? null : updatedUser.email;
+
+    res.json({
+      message: "Profil zaktualizowany pomyślnie",
+      user: {
+        id: updatedUser.id,
+        email: displayEmail,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        isStravaEmail: isStravaEmail,
+      },
+    });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ error: "Nie udało się zaktualizować profilu" });
+  }
+};
+
 
 export const stravaAuth = (req, res) => {
   const mode = req.query.mode === "connect" ? "connect" : "login";

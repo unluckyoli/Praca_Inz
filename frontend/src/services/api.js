@@ -92,6 +92,7 @@ export const authAPI = {
     return api.post("/auth/logout", { refreshToken });
   },
   getCurrentUser: () => api.get("/auth/me"),
+  updateProfile: (data) => api.patch("/auth/me", data),
   refresh: (refreshToken) => api.post("/auth/refresh", { refreshToken }),
   unlinkStrava: () => api.post("/auth/strava/unlink"),
   googleAuth: () => api.get("/auth/google"),
@@ -245,6 +246,7 @@ export const trainingPlanAPI = {
   deleteWorkout: (workoutId) => api.delete(`/training-plan/workout/${workoutId}`),
   addWorkout: (planId, data) => api.post(`/training-plan/my-plans/${planId}/workout`, data),
   updatePlanStatus: (planId, status) => api.patch(`/training-plan/my-plans/${planId}/status`, { status }),
+  updatePlanName: (planId, name) => api.patch(`/training-plan/my-plans/${planId}/name`, { name }),
   deletePlan: (planId) => api.delete(`/training-plan/my-plans/${planId}`),
   syncToCalendar: (planId, startDate) => api.post(`/training-plan/my-plans/${planId}/sync-to-calendar`, { startDate }),
   syncToTasks: (planId) => api.post(`/training-plan/my-plans/${planId}/sync-to-tasks`),

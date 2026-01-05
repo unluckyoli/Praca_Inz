@@ -5,6 +5,7 @@ import {
   logout,
   refresh,
   getCurrentUser,
+  updateProfile,
   stravaAuth,
   stravaCallback,
   unlinkStrava,
@@ -26,6 +27,7 @@ router.post("/login", login);
 router.post("/logout", logout);
 router.post("/refresh", refresh);
 router.get("/me", authenticateJWT, getCurrentUser);
+router.patch("/me", authenticateJWT, updateProfile);
 
 router.get("/strava", optionalAuthenticateJWT, stravaAuth);
 router.get("/strava/callback", optionalAuthenticateJWT, stravaCallback);

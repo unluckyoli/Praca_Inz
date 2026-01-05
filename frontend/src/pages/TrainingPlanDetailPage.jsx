@@ -41,6 +41,8 @@ function TrainingPlanDetailPage() {
   const [viewMode, setViewMode] = useState("week"); // "week" or "list"
   const [showStartDateModal, setShowStartDateModal] = useState(false);
   const [selectedStartDate, setSelectedStartDate] = useState(null);
+  const [editingPlanName, setEditingPlanName] = useState(false);
+  const [planNameInput, setPlanNameInput] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -336,6 +338,32 @@ function TrainingPlanDetailPage() {
     setShowWorkoutModal(true);
   };
 
+  const handleEditPlanName = () => {
+    setPlanNameInput(plan.name || "");
+    setEditingPlanName(true);
+  };
+
+  const handleSavePlanName = async () => {
+    if (!planNameInput.trim()) {
+      alert("Nazwa planu nie może być pusta");
+      return;
+    }
+
+    try {
+      await trainingPlanAPI.updatePlanName(planId, planNameInput.trim());
+      setEditingPlanName(false);
+      await fetchPlan();
+    } catch (error) {
+      console.error("Update plan name error:", error);
+      alert("Błąd podczas zapisywania nazwy planu");
+    }
+  };
+
+  const handleCancelEditPlanName = () => {
+    setEditingPlanName(false);
+    setPlanNameInput("");
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("pl-PL", {
@@ -463,7 +491,67 @@ function TrainingPlanDetailPage() {
 
         <div className="plan-header">
           <div>
-            <h1>{plan.name || plan.goal}</h1>
+            {editingPlanName ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <input
+                  type="text"
+                  value={planNameInput}
+                  onChange={(e) => setPlanNameInput(e.target.value)}
+                  style={{
+                    fontSize: '1.75rem',
+                    fontWeight: 'bold',
+                    padding: '8px 12px',
+                    border: '2px solid #3b82f6',
+                    borderRadius: '6px',
+                    minWidth: '300px'
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleSavePlanName}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Zapisz
+                </button>
+                <button
+                  onClick={handleCancelEditPlanName}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Anuluj
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <h1>{plan.name || plan.goal}</h1>
+                <button
+                  onClick={handleEditPlanName}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '4px 8px'
+                  }}
+                  title="Edytuj nazwę planu"
+                >
+                  <Edit2 size={18} />
+                </button>
+              </div>
+            )}
             <p className="plan-goal">{plan.goal}</p>
           </div>
 

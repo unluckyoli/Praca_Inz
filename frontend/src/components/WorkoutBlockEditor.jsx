@@ -132,7 +132,11 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange, readOnly = false }) 
         if (updated.duration && updated.pace) {
           const paceMinutes = parsePace(updated.pace);
           if (paceMinutes) {
-            updated.distance = parseFloat((updated.duration / paceMinutes).toFixed(2));
+            // Oblicz dystans bazowy
+            const baseDistance = updated.duration / paceMinutes;
+            // Dla interwałów uwzględnij repetitions
+            const reps = updated.type === 'intervals' ? (updated.repetitions || 1) : 1;
+            updated.distance = parseFloat((baseDistance * reps).toFixed(2));
           }
         }
         
@@ -152,7 +156,9 @@ function WorkoutBlockEditor({ initialBlocks = [], onChange, readOnly = false }) 
       if (block.duration && block.pace) {
         const paceMinutes = parsePace(block.pace);
         if (paceMinutes) {
-          return sum + (block.duration / paceMinutes);
+          const baseDistance = block.duration / paceMinutes;
+          const reps = block.type === 'intervals' ? (block.repetitions || 1) : 1;
+          return sum + (baseDistance * reps);
         }
       }
       return sum;

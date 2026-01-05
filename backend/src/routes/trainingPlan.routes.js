@@ -8,6 +8,7 @@ import {
   getTrainingPlanById,
   completeWorkout,
   updatePlanStatus,
+  updatePlanName,
   deleteTrainingPlan,
   getRecommendedPlan,
   getPlanTemplates,
@@ -34,6 +35,7 @@ router.post("/my-plans/:planId/recompute-workouts", authenticate, recomputePlanW
 router.delete("/workout/:workoutId", authenticate, deleteWorkout);
 router.post("/my-plans/:planId/workout", authenticate, addWorkoutToPlan);
 router.patch("/my-plans/:planId/status", authenticate, updatePlanStatus);
+router.patch("/my-plans/:planId/name", authenticate, updatePlanName);
 router.delete("/my-plans/:planId", authenticate, deleteTrainingPlan);
 router.post("/my-plans/:id/sync-to-calendar", authenticate, syncPlanToCalendar);
 router.post("/my-plans/:id/sync-to-tasks", authenticate, syncPlanToGoogleTasks);

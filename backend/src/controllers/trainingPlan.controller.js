@@ -1496,6 +1496,42 @@ export const updatePlanStatus = async (req, res) => {
   }
 };
 
+export const updatePlanName = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { planId } = req.params;
+    const { name } = req.body;
+
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ error: "Nazwa planu jest wymagana" });
+    }
+
+    const plan = await prisma.trainingPlan.findFirst({
+      where: {
+        id: planId,
+        userId,
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({ error: "Training plan not found" });
+    }
+
+    const updatedPlan = await prisma.trainingPlan.update({
+      where: { id: planId },
+      data: { name: name.trim() },
+    });
+
+    res.json({
+      message: "Plan name updated",
+      plan: updatedPlan,
+    });
+  } catch (error) {
+    console.error("Update plan name error:", error);
+    res.status(500).json({ error: "Failed to update plan name" });
+  }
+};
+
 export const deleteTrainingPlan = async (req, res) => {
   try {
     const userId = getUserId(req);
