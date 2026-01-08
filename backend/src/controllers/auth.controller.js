@@ -319,6 +319,7 @@ export const getCurrentUser = async (req, res) => {
         isStravaEmail: isStravaEmail,
         firstName: user.firstName,
         lastName: user.lastName,
+        createdAt: user.createdAt,
         hasStravaData: isStravaConnected,
         hasGarminData: !!user.garminId,
         hasGoogleCalendar: !!user.googleRefreshToken,

@@ -573,23 +573,27 @@ OUTPUT ONLY VALID JSON!
       const prompt = `
 Jesteś ekspertem sportowym. Przeanalizuj dwie aktywności i podaj ZWIĘZŁE podsumowanie porównawcze.
 
-AKTYWNOŚĆ 1: ${firstActivity.type} - ${(firstActivity.distance / 1000).toFixed(1)}km, ${this.formatTime(firstActivity.duration)}, tempo: ${firstActivity.paceStats?.meanPace ? firstActivity.paceStats.meanPace.toFixed(2) + ' min/km' : 'brak'}
-AKTYWNOŚĆ 2: ${secondActivity.type} - ${(secondActivity.distance / 1000).toFixed(1)}km, ${this.formatTime(secondActivity.duration)}, tempo: ${secondActivity.paceStats?.meanPace ? secondActivity.paceStats.meanPace.toFixed(2) + ' min/km' : 'brak'}
+AKTYWNOŚĆ 1: ${firstActivity.type} - ${(firstActivity.distance / 1000).toFixed(1)}km, ${this.formatTime(firstActivity.duration)}, tempo: ${firstActivity.avgPaceMinPerKm? firstActivity.avgPaceMinPerKm.toFixed(2) + ' min/km': 'brak'}
+AKTYWNOŚĆ 2: ${secondActivity.type} - ${(secondActivity.distance / 1000).toFixed(1)}km, ${this.formatTime(secondActivity.duration)}, tempo: ${secondActivity.avgPaceMinPerKm? secondActivity.avgPaceMinPerKm.toFixed(2) + ' min/km': 'brak'}
 
-Dane tempa Aktywność 1: ${firstActivity.pacePerKm ? firstActivity.pacePerKm.slice(0, 5).map((p, i) => `${i+1}km: ${p.toFixed(2)}`).join(', ') + (firstActivity.pacePerKm.length > 5 ? '...' : '') : 'brak'}
-Dane tempa Aktywność 2: ${secondActivity.pacePerKm ? secondActivity.pacePerKm.slice(0, 5).map((p, i) => `${i+1}km: ${p.toFixed(2)}`).join(', ') + (secondActivity.pacePerKm.length > 5 ? '...' : '') : 'brak'}
+Dane tempa Aktywność 1: ${firstActivity.pacePerKm && firstActivity.pacePerKm.length > 0 ? firstActivity.pacePerKm.map((p, i) => `${i + 1}km: ${p.toFixed(2)}`).join(', '): 'brak danych per kilometr'}
+Dane tempa Aktywność 2: ${secondActivity.pacePerKm && secondActivity.pacePerKm.length > 0 ? secondActivity.pacePerKm.map((p, i) => `${i + 1}km: ${p.toFixed(2)}`).join(', '): 'brak danych per kilometr'}
+
+Pamiętaj, że to co ci podałem to jest tempo na każdy kilometr, nie średnie tempo z całej aktywności.
 
 Strefy tempa A1: ${firstActivity.paceZones ? Object.entries(firstActivity.paceZones.zones).map(([z, d]) => `${z}:${d.percent.toFixed(0)}%`).join(', ') : 'brak'}
 Strefy tempa A2: ${secondActivity.paceZones ? Object.entries(secondActivity.paceZones.zones).map(([z, d]) => `${z}:${d.percent.toFixed(0)}%`).join(', ') : 'brak'}
 
 NAPISZ ZWIĘZŁE PODSUMOWANIE (max 400 słów) zawierające:
-• Która aktywność była lepsza i dlaczego
+• Która aktywność była "lepsza" i dlaczego
 • Kluczowe różnice w tempie i wysiłku
 • Mocne i słabe strony każdej aktywności
-• 2-3 konkretne rady na przyszłość
+• 2-3 konkretne rady na przyszłość, najlepiej nieoczywiste.
 
+Jeśli chcesz zawrzeć informację o tempach to podawaj ją w formacie "X:XX min/km".
 NIE POWTARZAJ danych liczbowych już widocznych w interfejsie. Skup się na analizie i wnioskach. Bazuj tylko na prawdziwych dostarczonych danych.
 Nie zgaduj i nie dodawaj informacji, których nie ma w danych na przykład o warunkach pogodowych czy trasie. Natomiast możesz nadmienić, że dany wynik mógł być spowodowany pogoda czy temperaturą.
+Weź pod uwagę, że aktywności mogą mieć różne dystanse i czasy trwania. Spróbuj je ujednolicić w analizie.
 Odpowiedź po polsku, profesjonalna ale przystępna.
 `;
 

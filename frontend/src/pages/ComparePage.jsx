@@ -474,67 +474,6 @@ function ComparePage() {
 
 
 
-  // const getLoadFormData = () => {
-  //   if (!comparison?.first || !comparison?.second) return [];
-
-  //   const a = comparison.first;
-  //   const b = comparison.second;
-
-  //   // zabezpieczenia, żeby nie wywaliło się na nullach
-  //   const psA = a.paceStats || {};
-  //   const psB = b.paceStats || {};
-  //   const climbA = a.climbMetrics || {};
-  //   const climbB = b.climbMetrics || {};
-
-  //   const distA = (a.distance || 0) / 1000;
-  //   const distB = (b.distance || 0) / 1000;
-
-  //   return [
-  //     {
-  //       name: "Średnie tempo (min/km)",
-  //       [a.name]: psA.meanPace ?? null,
-  //       [b.name]: psB.meanPace ?? null,
-  //     },
-  //     {
-  //       name: "Zmienność tempa (s)",
-  //       [a.name]: psA.stdDevSeconds ?? null,
-  //       [b.name]: psB.stdDevSeconds ?? null,
-  //     },
-  //     {
-  //       name: "Różnica 1. vs 2. połowa (s)",
-  //       [a.name]: psA.splitDeltaSeconds ?? null,
-  //       [b.name]: psB.splitDeltaSeconds ?? null,
-  //     },
-  //     {
-  //       name: "Dystans (km)",
-  //       [a.name]: distA,
-  //       [b.name]: distB,
-  //     },
-  //     {
-  //       name: "Średnie nachylenie (%)",
-  //       [a.name]: climbA.avgGradientPercent ?? 0,
-  //       [b.name]: climbB.avgGradientPercent ?? 0,
-  //     },
-  //   ];
-  // };
-
-
-
-
-  const computeAvgPace = (activity) => {
-    if (!activity?.distance || !activity?.duration) return null;
-    const km = activity.distance / 1000;
-    if (km <= 0) return null;
-    const pace = (activity.duration / 60) / km; // min/km
-    if (!Number.isFinite(pace) || pace <= 0) return null;
-    return pace;
-  };
-
-
-
-
-
-
   const pacePerKmChartData = useMemo(() => {
     if (
       !comparison ||
@@ -864,16 +803,16 @@ function ComparePage() {
                     <td>Średnie tempo (cały bieg)</td>
                     <td>
                       {renderValueWithHighlight(
-                        computeAvgPace(comparison.first),
-                        computeAvgPace(comparison.second),
+                        comparison.first.avgPaceMinPerKm,
+                        comparison.second.avgPaceMinPerKm,
                         false,
                         (v) => formatPaceMinPerKm(v),
                       )}
                     </td>
                     <td>
                       {renderValueWithHighlight(
-                        computeAvgPace(comparison.second),
-                        computeAvgPace(comparison.first),
+                        comparison.second.avgPaceMinPerKm,
+                        comparison.first.avgPaceMinPerKm,
                         false,
                         (v) => formatPaceMinPerKm(v),
                       )}
